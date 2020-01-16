@@ -1,0 +1,7 @@
+//TODO
+Have timer start and stop when he speed is greater than 0
+Upload code to uno to correct odo reset.
+add battery reading
+ADD ldr to UNO
+add mosfet control to light
+pass current odo information to arduino if not reset on startup. 

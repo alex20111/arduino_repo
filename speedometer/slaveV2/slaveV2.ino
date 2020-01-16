@@ -173,6 +173,7 @@ void processBtns() {
 
   } else if (btnOne.pressedFor(1000) && !inMenu && !resetOdoSent) {
     //long press, reset odo
+    revolutionCount = 0;
     currentDistance = 0.0;
     Serial.print('<');
     Serial.print(CMD_BTN1_RESET_ODO);

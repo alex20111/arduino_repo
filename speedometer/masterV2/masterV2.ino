@@ -23,6 +23,8 @@ char currOdoBuffer[10];
 char odoDspFormatted [14]; //odo on oled.
 //time
 long startTime = 0;
+long storedTime = 0;
+unsigned long timeInMillis = 0;
 char timeBuffer[10];
 //speed
 char speedBuffer[5];
@@ -65,16 +67,17 @@ const char CMD_LIGHT_DATA   = 'C'; // options: Send to slave on startup for ligh
 boolean inMenuMode = false;
 const uint8_t WHEEL_CIR_MIN = 191; //in cm
 const uint8_t WHEEL_CIR_MAX = 233; //in cm
-uint8_t menuOption = 0; //menu all options = 1, wheel circumference = 2, menu Lights = 3, menu exit = 4;
+uint8_t menuOption = 99; //Select wheel circumference = 0,1, Select menu Lights = 2, menu exit = 3;
+uint8_t viewingScreen = 0;// screen 0 = main menu, screen 1 = wheel circ, screen 3 = light option
 uint8_t currWheelCirc = 209; //in CM, Saved in EEPROM[2]
 uint8_t lightAuto = 0; //0 = ON , 1 = off;
 const char *main_menu_list =
-  "Wheel Size\n" 
-  "Light\n" 
+  "Wheel Size\n"
+  "Light\n"
   "Exit";
 
-char menu_wheel_size[32];
-const char *menu_wheel_size_txt = 
+char menu_wheel_size[40];
+const char *menu_wheel_size_txt =
   "UP / DOWN to change\n"
   "BTN 1 for exit";
 
@@ -85,16 +88,16 @@ void setup(void) {
   Serial.print(EEPROM.get(eepromIdx[2], currWheelCirc));
   //
   //just once, verity fi we have data for wheel circ and lignt auto
-//  if (EEPROM.read(eepromIdx[2]) == 255) {
-//    Serial.println(F("No wheel circ, adding 209"));
-//    uint8_t circ = 209;
-//    EEPROM.put(eepromIdx[2], circ);
-//  }
-//  if (EEPROM.read(eepromIdx[3]) == 255) {
-//    Serial.println(F("No light status adding 0"));
-//    uint8_t lgt = 0;
-//    EEPROM.put(eepromIdx[3], lgt);
-//  }
+  //  if (EEPROM.read(eepromIdx[2]) == 255) {
+  //    Serial.println(F("No wheel circ, adding 209"));
+  //    uint8_t circ = 209;
+  //    EEPROM.put(eepromIdx[2], circ);
+  //  }
+  //  if (EEPROM.read(eepromIdx[3]) == 255) {
+  //    Serial.println(F("No light status adding 0"));
+  //    uint8_t lgt = 0;
+  //    EEPROM.put(eepromIdx[3], lgt);
+  //  }
   ////////////////////
 
   pinMode(THERMISTORPIN, INPUT);
@@ -124,9 +127,11 @@ void setup(void) {
   Serial.print(F("Curr odo: ")); //debug
   Serial.print(currOdo);
   Serial.print(F(" Total odo: ")); //debug
-               Serial.println(totalOdo);
-    mainScrPrevMillis = millis();
+  Serial.println(totalOdo);
+  mainScrPrevMillis = millis();
   startTime         = millis();
+
+  totalOdo = 0;
 }
 //MAIN LOOP//
 void loop(void) {
@@ -144,11 +149,11 @@ void loop(void) {
 
 void displayMainScreen() {
 
-  if (millis() - mainScrPrevMillis > 1000 && !inMenuMode) {
+  if (millis() - mainScrPrevMillis > 500 && !inMenuMode) {
     mainScrPrevMillis = millis();
 
     requestToDisplay();
-//    if(
+    //    if(
     timerCalculation();
 
     u8g2.clearBuffer();
@@ -166,7 +171,7 @@ void displayMainScreen() {
 
     u8g2.setCursor(25, 110);
     u8g2.print(F("Odo"));
-    u8g2.setCursor(0, 120);
+    u8g2.setCursor(5, 120);
     u8g2.print(odoDspFormatted);
 
     u8g2.setCursor(90, 110); //elapsed time
@@ -180,9 +185,9 @@ void displayMainScreen() {
 
     //  u8g2.setFont(u8g2_font_fub42_tr);
     u8g2.setFont(u8g2_font_7Segments_26x42_mn);
-    Serial.print(F("len:"));
-    Serial.print(strlen_P(speedBuffer)); //DEBUG
-    if (strlen_P(speedBuffer) < 2) {
+    //    Serial.print(F("len:"));
+    //    Serial.println(strlen(speedBuffer)); //DEBUG
+    if (strlen(speedBuffer) < 2) {
       u8g2.setCursor(50, 82);
     } else {
       u8g2.setCursor(30, 82);
@@ -192,16 +197,33 @@ void displayMainScreen() {
   }
 }
 void timerCalculation() {
-  //calculate the time stince started.
-  unsigned long over;
-  int timeInMillis = millis() - startTime; // just reset the startTime to millis to start over  the timer
-  int runHours = int(timeInMillis / 3600000);
-  over = (timeInMillis % 3600000);
-  int runMinutes = int(over / 60000);
-  over = over % 60000;
-  int runSeconds = int(over / 1000);
 
-  sprintf(timeBuffer, "%02d:%02d:%02d", runHours, runMinutes, runSeconds); ///user a lot.. may if running out , replace
+  int currSpeed = atoi(speedBuffer);
+
+  if (currSpeed > 0) {
+
+    //calculate the time stince started.
+    unsigned long over;
+    timeInMillis = millis()  - startTime; // just reset the startTime to millis to start over  the timer
+    int runHours = int(timeInMillis / 3600000);
+    over = (timeInMillis % 3600000);
+    int runMinutes = int(over / 60000);
+    over = over % 60000;
+    int runSeconds = int(over / 1000);
+
+    //Serial.println("");
+    //  Serial.print(F("timeInMillis:"));
+    //  Serial.print(timeInMillis);
+    //  Serial.print(F("Hours:" ));
+    //  Serial.println(runHours);
+    //  Serial.print(F("Minutes:" ));
+    //  Serial.println(runMinutes);
+    //  Serial.print(F("seconds:" ));
+    //  Serial.println(runSeconds);
+
+    sprintf(timeBuffer, "%02d:%02d:%02d", runHours, runMinutes, runSeconds); ///user a lot.. may if running out , replace
+
+  }
 }
 
 void requestToDisplay() {
@@ -258,9 +280,10 @@ void handleDisplayVar() {
       }
     }
   }
-  currOdoBuffer[charIdx] = '\0';
-//
-//  Serial.println(F("Results: "));
+
+currOdoBuffer[charIdx] = '\0';
+
+//  Serial.println(F("-----Results: -----"));
 //  Serial.print(F("speedBuffer: "));
 //  Serial.println(speedBuffer);
 //  Serial.print(F("lightBuffer: "));
@@ -268,14 +291,22 @@ void handleDisplayVar() {
 //  Serial.print(F("currOdoBuffer: "));
 //  Serial.println(currOdoBuffer);
 
-  prevOdo = (int)currOdo; //save previous current odo before incrementing
-  //add current odo to total odo
-  currOdo = atof(currOdoBuffer);
+prevOdo = (int)currOdo; //save previous current odo before incrementing
+//add current odo to total odo
+currOdo = atof(currOdoBuffer);
 
-  if ( (int)currOdo > prevOdo) { //Ex if
-    totalOdo++;
-  }
-  sprintf(odoDspFormatted, "%s/%l", currOdoBuffer, totalOdo);
+if ( (int)currOdo > prevOdo) { //Ex if
+  totalOdo++;
+}
+
+
+sprintf(odoDspFormatted, "%s/%06ld", currOdoBuffer, totalOdo);
+
+//  Serial.print(F("odoDspFormatted: "));
+//  Serial.println(odoDspFormatted);
+//  Serial.print(F("Total odo: "));
+//  Serial.println(totalOdo);
+
 }
 
 void readTemperatureTherm() {
@@ -308,6 +339,9 @@ void readTemperatureTherm() {
 }
 void saveOdo() {
   Serial.println(F("Received command to save ODO"));
+  Serial.println(totalOdo);
+  Serial.print(F("Curr odo"));
+  Serial.println(currOdo);
   EEPROM.put(eepromIdx[0], totalOdo);
   EEPROM.put(eepromIdx[1], currOdo);
 }
@@ -351,33 +385,116 @@ void sendSlaveStartingData() {
 
 }
 
+void handleBtn1Menus() {
+
+  //  Serial.print("viewingScreen: ");
+  //  Serial.println(viewingScreen);
+  //  Serial.print("MenuOption: ");
+  //  Serial.println(menuOption);
+  if (viewingScreen == 0) {
+    if (menuOption == 3) {
+      inMenuMode = false;
+      menuOption = 99;
+      viewingScreen = 0;
+
+      Serial1.print('<');
+      Serial1.print(CMD_MENU_END);
+      Serial1.print(inMenuMode);
+      Serial1.print('>');
+
+    } else if (menuOption == 0 || menuOption == 1) {
+      viewingScreen = 1;
+      menuWheelCirc();
+    } else {
+      inMenuMode = true;
+      menuOption = 0;
+      printMenuList();
+    }
+  } else if (viewingScreen == 1) {
+    viewingScreen = 0;
+    menuOption = 1;
+    //save wheel circ
+    EEPROM.put(eepromIdx[2], currWheelCirc);
+    Serial1.print('<');
+    Serial1.print(CMD_WHEEL_DATA);
+    Serial1.print(currWheelCirc);
+    Serial1.print('>');
+    printMenuList();
+  }
+}
+
+void handleBtn2() {
+
+  //    Serial.print("viewingScreen: ");
+  //  Serial.println(viewingScreen);
+  //  Serial.print("currWheelCirc: ");
+  //  Serial.println(currWheelCirc);
+  if (viewingScreen == 0) {
+    if (menuOption == 3) {
+      menuOption = 2;
+    } else if (menuOption == 2) {
+      menuOption = 0;
+    } else {
+      menuOption = 3;
+    }
+    printMenuList();
+
+  } else if (viewingScreen == 1) {
+    if (currWheelCirc == 220) {
+      currWheelCirc = 150;
+    } else {
+      currWheelCirc ++;
+    }
+    menuWheelCirc();
+  }
+}
+
+void handleBtn3() {
+  if (viewingScreen == 0) {
+    if (menuOption == 3) {
+      menuOption = 0;
+    } else if (menuOption == 0 || menuOption == 1) {
+      menuOption = 2;
+    } else {
+      menuOption = 3;
+    }
+    printMenuList();
+  } else if (viewingScreen == 1) {
+    if (currWheelCirc == 150) {
+      currWheelCirc = 220;
+    } else {
+      currWheelCirc --;
+    }
+    menuWheelCirc();
+  }
+}
+
 void printMenuList() {
-  Serial.print(F("menu option: "));
-  Serial.println(menuOption);
+  //  Serial.print(F("menu option: "));
+  //  Serial.println(menuOption);
   u8g2.setFont(u8g2_font_6x12_tr);
   u8g2.userInterfaceSelectionListNB(
     "Menu",
     menuOption,
     main_menu_list);
-
-    Serial.println(F("FFFFF"));
 }
 
-void menuWheelCirc(){
-  sprintf(menu_wheel_size, "%s%d", menu_wheel_size_txt, currWheelCirc);
+void menuWheelCirc() {
+  //  Serial.println(F("In menuWheelCirc"));
+  sprintf(menu_wheel_size, "%s\n%d", menu_wheel_size_txt, currWheelCirc);
   u8g2.setFont(u8g2_font_6x12_tr);
   u8g2.userInterfaceSelectionListNB(
     "Size in CM",
-    menuOption,
+    3,
     menu_wheel_size);
-  
+
 }
 
 void handleSerialRead() {
 
   if (newData == true) {
-    Serial.print(F("new Data: "));
-    Serial.println(receivedChars);
+    //    Serial.print(F("new Data: "));
+    //    Serial.println(receivedChars);
 
     newData = false;
     switch (receivedChars[0]) {
@@ -395,34 +512,16 @@ void handleSerialRead() {
         break;
       case CMD_BTN2_SHORT: //up
         Serial.println(F("BTN2 short"));
-        if (menuOption == 0) {
-          menuOption = 2;
-        } else {
-          menuOption --;
-        }
-        printMenuList();
+        handleBtn2();
         break;
       case CMD_BTN1_MENU:
         Serial.println(F("CMD_BTN1_MENU"));
-        if (menuOption == 2) {
-          inMenuMode = false;
-          menuOption = 0;
-        }else if (menuOption == 1){
-          menuWheelCirc();
-        } else {
-          inMenuMode = true;
-          printMenuList();
-        }
+        handleBtn1Menus();
 
         break;
       case CMD_BTN3_SHORT: //down
         Serial.println(F("CMD_BTN3_SHORT"));
-        if (menuOption == 2) {
-          menuOption = 0;
-        } else {
-          menuOption ++;
-        }
-        printMenuList();
+        handleBtn3();
         break;
       case 'Z': //DEBUG
         requestToDisplay();
@@ -444,15 +543,15 @@ void recvWithStartEndMarkers() {
   while (Serial1.available() > 0 && newData == false) {
     rc = Serial1.read();
 
-    Serial.print("->: ");
+    //    Serial.print("->: ");
 
-    Serial.println(rc);
+    //    Serial.println(rc);
 
     if (recvInProgress == true) {
       if (rc != endMarker) {
         receivedChars[ndx] = rc;
         ndx++;
-        if (ndx >= numChars) {   
+        if (ndx >= numChars) {
           ndx = numChars - 1;
         }
       } else {
