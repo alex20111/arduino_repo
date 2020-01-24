@@ -4,6 +4,8 @@
 #include <EEPROM.h>
 #include "bitmap.h"
 
+#include <Battery.h> //https://github.com/rlogiacco/BatterySense#double-cell-li-ion-2s-on-5v-mcu
+
 #ifdef U8X8_HAVE_HW_SPI
 #include <SPI.h>
 #endif
@@ -12,9 +14,16 @@
 #include <Wire.h>
 #endif
 
-U8G2_SSD1327_MIDAS_128X128_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/ 10, /* dc=*/ 9, /* reset=*/ 8);
+//PINS
+#define THERMISTORPIN A1
+#define BATTERY A2
+#define U8g2_CS 10
+#define U8g2_DC 9
+#define U8g2_RESET 8
+
+U8G2_SSD1327_MIDAS_128X128_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/ U8g2_CS, /* dc=*/ U8g2_DC, /* reset=*/ U8g2_RESET);
 //EEPROM IDX
-uint8_t eepromIdx[] = {0, 4, 8, 9}; //saves in EEPROM. 0=totalOdo(4byte), 4=currOdo(4b),8=currWheelCirc(1b), 9=lightAuto(1b), 10 --> to be next
+uint8_t eepromIdx[] = {0, 4, 8, 9}; //saves in EEPROM. 0=totalOdo(4byte), 4=currOdo(4b),8=currWheelCirc(1b), 9=lightOption(1b), 10 --> to be next
 
 // speedometer display
 long totalOdo = 0;   //Saved in EEPROM eepromIdx[0]
@@ -32,7 +41,7 @@ char speedBuffer[5];
 char lightBuffer[6];
 
 //temperature//
-#define THERMISTORPIN A1 // which analog pin to connect
+ // which analog pin to connect
 #define THERMISTORNOMINAL 11000 // resistance at 25 degrees C
 #define TEMPERATURENOMINAL 25 // temp. for nominal resistance (almost always 25 C)
 #define NUMSAMPLES 5 // how many samples to take and average, more takes longer but is more 'smooth'
@@ -70,22 +79,34 @@ const uint8_t WHEEL_CIR_MAX = 233; //in cm
 uint8_t menuOption = 99; //Select wheel circumference = 0,1, Select menu Lights = 2, menu exit = 3;
 uint8_t viewingScreen = 0;// screen 0 = main menu, screen 1 = wheel circ, screen 3 = light option
 uint8_t currWheelCirc = 209; //in CM, Saved in EEPROM[2]
-uint8_t lightAuto = 0; //0 = ON , 1 = off;
+uint8_t lightOption = 1; //1 = AUTO (Turn on/off automatically) , 2 = ON (Always ON) , 3 = off (Lights off);  //alex
 const char *main_menu_list =
   "Wheel Size\n"
   "Light\n"
   "Exit";
-
-char menu_wheel_size[40];
 const char *menu_wheel_size_txt =
   "UP / DOWN to change\n"
-  "BTN 1 for exit";
+  "BTN 1 for select/exit"; //alex
 
+const char *menu_light_txt = //alex
+  "AUTO\n"
+  "ON\n"
+  "OFF\n";  
 
+  char menu_temp_storage[46];  //alex
+
+//BATTERY
+Battery batt = Battery(7400, 8400, BATTERY);   //TODO, use voltage divider to sample battery power
+char battBufffer[4] = "100%";
+  
 void setup(void) {
   Serial.begin(9600); // to debug
   Serial1.begin(115200); //communication between mcu  250000bps
   Serial.print(EEPROM.get(eepromIdx[2], currWheelCirc));
+  
+  // batt.begin(5000, 1.68); 
+  
+  
   //
   //just once, verity fi we have data for wheel circ and lignt auto
   //  if (EEPROM.read(eepromIdx[2]) == 255) {
@@ -161,7 +182,7 @@ void displayMainScreen() {
 
     u8g2.drawXBMP( 110, 0, 16, 16, battery_bitmap);
     u8g2.setCursor(111, 21);
-    u8g2.print(F("12%"));
+    u8g2.print(battBuffer);
 
     u8g2.drawXBMP( 0, 0, 16, 16, light_bitmap);
     u8g2.setCursor(50, 10); //temperature
@@ -380,7 +401,7 @@ void problemConnectingScreen() {
 //sending to slave at startup
 void sendSlaveStartingData() {
   EEPROM.get(eepromIdx[2], currWheelCirc);
-  EEPROM.get(eepromIdx[3], lightAuto);
+  EEPROM.get(eepromIdx[3], lightOption);
 
   Serial1.print('<');
   Serial1.print(CMD_WHEEL_DATA);
@@ -389,7 +410,7 @@ void sendSlaveStartingData() {
 
   Serial1.print('<');
   Serial1.print(CMD_LIGHT_DATA);
-  Serial1.print(lightAuto);
+  Serial1.print(lightOption);
   Serial1.print('>');
   Serial1.flush();
 
@@ -402,7 +423,7 @@ void handleBtn1Menus() {
   //  Serial.print("MenuOption: ");
   //  Serial.println(menuOption);
   if (viewingScreen == 0) {
-    if (menuOption == 3) {
+    if (menuOption == 3) {  //exit menu
       inMenuMode = false;
       menuOption = 99;
       viewingScreen = 0;
@@ -412,10 +433,13 @@ void handleBtn1Menus() {
       Serial1.print(inMenuMode);
       Serial1.print('>');
 
-    } else if (menuOption == 0 || menuOption == 1) {
+    } else if (menuOption == 0 || menuOption == 1) {  //display Wheel circ menu
       viewingScreen = 1;
       menuWheelCirc();
-    } else {
+	}else if (menuOption == 2){  //display lights menu
+		viewingScreen = 2;
+		menuLightStatus();
+    } else {  	//displaying menu (init)
       inMenuMode = true;
       menuOption = 0;
       printMenuList();
@@ -430,6 +454,17 @@ void handleBtn1Menus() {
     Serial1.print(currWheelCirc);
     Serial1.print('>');
     printMenuList();
+  }else if (viewingScreen == 2){
+	viewingScreen = 0;
+    menuOption = 2;
+  
+	EEPROM.put(eepromIdx[3], lightOption);
+	Serial1.print('<');
+    Serial1.print(CMD_LIGHT_DATA);
+    Serial1.print(lightOption);
+    Serial1.print('>');
+    printMenuList();
+	
   }
 }
 
@@ -440,11 +475,11 @@ void handleBtn2() {
   //  Serial.print("currWheelCirc: ");
   //  Serial.println(currWheelCirc);
   if (viewingScreen == 0) {
-    if (menuOption == 3) {
+    if (menuOption == 3) {  //if on exit, go to light option
       menuOption = 2;
-    } else if (menuOption == 2) {
+    } else if (menuOption == 2) { //if on light , got to wheel option
       menuOption = 0;
-    } else {
+    } else { 
       menuOption = 3;
     }
     printMenuList();
@@ -456,6 +491,15 @@ void handleBtn2() {
       currWheelCirc ++;
     }
     menuWheelCirc();
+  }else if (viewingScreen == 2){
+     if (lightOption == 1){
+		lightOption = 3;
+	 }else if (lightOption == 3){
+		lightOption = 2;
+	 }else if (lightOption == 2){
+		lightOption = 1;
+	 }
+	 menuLightStatus();
   }
 }
 
@@ -476,6 +520,15 @@ void handleBtn3() {
       currWheelCirc --;
     }
     menuWheelCirc();
+  } else if (viewingScreen == 2){
+     if (lightOption == 1){
+		lightOption = 2;
+	 }else if (lightOption == 2){
+		lightOption = 3;
+	 }else if (lightOption == 3){
+		lightOption = 1;
+	 }
+	 menuLightStatus();
   }
 }
 
@@ -491,14 +544,22 @@ void printMenuList() {
 
 void menuWheelCirc() {
   //  Serial.println(F("In menuWheelCirc"));
-  sprintf(menu_wheel_size, "%s\n%d", menu_wheel_size_txt, currWheelCirc);
+  sprintf(menu_temp_storage, "%s\n%d", menu_wheel_size_txt, currWheelCirc);  //alex
   u8g2.setFont(u8g2_font_6x12_tr);
   u8g2.userInterfaceSelectionListNB(
     "Size in CM",
     3,
-    menu_wheel_size);
-
+    menu_temp_storage);  //alex
 }
+
+		void menuLightStatus() {   //alex
+		 
+		  u8g2.setFont(u8g2_font_6x12_tr);
+		  u8g2.userInterfaceSelectionListNB(
+			"Light Option",
+			lightOption,
+			menu_light_txt);
+		}   //alex
 
 void handleSerialRead() {
 
