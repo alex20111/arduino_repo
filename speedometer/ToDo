@@ -1,7 +1,18 @@
-//TODO
-Have timer start and stop when he speed is greater than 0
+CODE: coding need to be done
+HW : hardware need to be done
+
+--------------TODO---------------
+CODE/HW: add battery reading
+CODE/HW: ADD ldr to UNO  -- NEXT
+CODE/HW: add mosfet control to light.
+CODE   : pass current odo information to arduino if not reset on startup. Right now currentOdo start at 0 every reboot.
+CODE   : ADD LDR menu to mega. Option to enable or disable auto lights.
+
+
+---------------TEST--------------
+
+
+------------TEST DONE--------------
 Upload code to uno to correct odo reset.
-add battery reading
-ADD ldr to UNO
-add mosfet control to light
-pass current odo information to arduino if not reset on startup. 
+Have timer start and stop when he speed is greater than 0
+reset timer when odo is reset

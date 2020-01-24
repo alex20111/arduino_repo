@@ -1,3 +1,4 @@
+#include <StopWatch.h>
 #include <Arduino.h>
 #include <U8g2lib.h>
 #include <EEPROM.h>
@@ -22,9 +23,8 @@ int prevOdo = 0;
 char currOdoBuffer[10];
 char odoDspFormatted [14]; //odo on oled.
 //time
-long startTime = 0;
-long storedTime = 0;
-unsigned long timeInMillis = 0;
+StopWatch chrono;
+boolean timerStarted = false;
 char timeBuffer[10];
 //speed
 char speedBuffer[5];
@@ -129,8 +129,8 @@ void setup(void) {
   Serial.print(F(" Total odo: ")); //debug
   Serial.println(totalOdo);
   mainScrPrevMillis = millis();
-  startTime         = millis();
 
+  chrono.reset();
   totalOdo = 0;
 }
 //MAIN LOOP//
@@ -153,7 +153,6 @@ void displayMainScreen() {
     mainScrPrevMillis = millis();
 
     requestToDisplay();
-    //    if(
     timerCalculation();
 
     u8g2.clearBuffer();
@@ -200,13 +199,21 @@ void timerCalculation() {
 
   int currSpeed = atoi(speedBuffer);
 
-  if (currSpeed > 0) {
+  if (currSpeed > 0 && !timerStarted) {
 
+    timerStarted = true;
+    chrono.start();
+  } else if (currSpeed <= 1 && timerStarted) {
+
+    timerStarted = false;
+    chrono.stop();
+  }
+
+  if (timerStarted) {
     //calculate the time stince started.
     unsigned long over;
-    timeInMillis = millis()  - startTime; // just reset the startTime to millis to start over  the timer
-    int runHours = int(timeInMillis / 3600000);
-    over = (timeInMillis % 3600000);
+    int runHours = int(chrono.value() / 3600000);
+    over = (chrono.value() % 3600000);
     int runMinutes = int(over / 60000);
     over = over % 60000;
     int runSeconds = int(over / 1000);
@@ -281,31 +288,31 @@ void handleDisplayVar() {
     }
   }
 
-currOdoBuffer[charIdx] = '\0';
+  currOdoBuffer[charIdx] = '\0';
 
-//  Serial.println(F("-----Results: -----"));
-//  Serial.print(F("speedBuffer: "));
-//  Serial.println(speedBuffer);
-//  Serial.print(F("lightBuffer: "));
-//  Serial.println(lightBuffer);
-//  Serial.print(F("currOdoBuffer: "));
-//  Serial.println(currOdoBuffer);
+  //  Serial.println(F("-----Results: -----"));
+  //  Serial.print(F("speedBuffer: "));
+  //  Serial.println(speedBuffer);
+  //  Serial.print(F("lightBuffer: "));
+  //  Serial.println(lightBuffer);
+  //  Serial.print(F("currOdoBuffer: "));
+  //  Serial.println(currOdoBuffer);
 
-prevOdo = (int)currOdo; //save previous current odo before incrementing
-//add current odo to total odo
-currOdo = atof(currOdoBuffer);
+  prevOdo = (int)currOdo; //save previous current odo before incrementing
+  //add current odo to total odo
+  currOdo = atof(currOdoBuffer);
 
-if ( (int)currOdo > prevOdo) { //Ex if
-  totalOdo++;
-}
+  if ( (int)currOdo > prevOdo) { //Ex if
+    totalOdo++;
+  }
 
 
-sprintf(odoDspFormatted, "%s/%06ld", currOdoBuffer, totalOdo);
+  sprintf(odoDspFormatted, "%s/%06ld", currOdoBuffer, totalOdo);
 
-//  Serial.print(F("odoDspFormatted: "));
-//  Serial.println(odoDspFormatted);
-//  Serial.print(F("Total odo: "));
-//  Serial.println(totalOdo);
+  //  Serial.print(F("odoDspFormatted: "));
+  //  Serial.println(odoDspFormatted);
+  //  Serial.print(F("Total odo: "));
+  //  Serial.println(totalOdo);
 
 }
 
@@ -349,6 +356,9 @@ void resetCurrentOdo() {
   Serial.println(F("Received command to RESET ODO"));
   currOdo = 0;
   EEPROM.put(eepromIdx[1], currOdo);
+  chrono.reset();
+  timeBuffer[0] = '0';timeBuffer[1] = '0';timeBuffer[2] = ':';timeBuffer[3] = '0';timeBuffer[4] = '0';timeBuffer[5] = ':';
+  timeBuffer[6] = '0';timeBuffer[7] = '0';timeBuffer[8] = '\0';
 }
 void welcomeScreen() {
   u8g2.clearBuffer();
