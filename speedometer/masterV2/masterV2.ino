@@ -41,7 +41,7 @@ char speedBuffer[5];
 char lightBuffer[6];
 
 //temperature//
- // which analog pin to connect
+// which analog pin to connect
 #define THERMISTORNOMINAL 11000 // resistance at 25 degrees C
 #define TEMPERATURENOMINAL 25 // temp. for nominal resistance (almost always 25 C)
 #define NUMSAMPLES 5 // how many samples to take and average, more takes longer but is more 'smooth'
@@ -91,22 +91,22 @@ const char *menu_wheel_size_txt =
 const char *menu_light_txt = //alex
   "AUTO\n"
   "ON\n"
-  "OFF\n";  
+  "OFF\n";
 
-  char menu_temp_storage[46];  //alex
+char menu_temp_storage[46];  //alex
 
 //BATTERY
 Battery batt = Battery(7400, 8400, BATTERY);   //TODO, use voltage divider to sample battery power
-char battBufffer[4] = "100%";
-  
+char battBuffer[4] = "100%";
+
 void setup(void) {
   Serial.begin(9600); // to debug
   Serial1.begin(115200); //communication between mcu  250000bps
   Serial.print(EEPROM.get(eepromIdx[2], currWheelCirc));
-  
-  // batt.begin(5000, 1.68); 
-  
-  
+
+  // batt.begin(5000, 1.68);
+
+
   //
   //just once, verity fi we have data for wheel circ and lignt auto
   //  if (EEPROM.read(eepromIdx[2]) == 255) {
@@ -152,6 +152,7 @@ void setup(void) {
   mainScrPrevMillis = millis();
 
   chrono.reset();
+  resetTimeBuffer();
   totalOdo = 0;
 }
 //MAIN LOOP//
@@ -378,8 +379,11 @@ void resetCurrentOdo() {
   currOdo = 0;
   EEPROM.put(eepromIdx[1], currOdo);
   chrono.reset();
-  timeBuffer[0] = '0';timeBuffer[1] = '0';timeBuffer[2] = ':';timeBuffer[3] = '0';timeBuffer[4] = '0';timeBuffer[5] = ':';
-  timeBuffer[6] = '0';timeBuffer[7] = '0';timeBuffer[8] = '\0';
+
+}
+void resetTimeBuffer() {
+  timeBuffer[0] = '0'; timeBuffer[1] = '0'; timeBuffer[2] = ':'; timeBuffer[3] = '0'; timeBuffer[4] = '0'; timeBuffer[5] = ':';
+  timeBuffer[6] = '0'; timeBuffer[7] = '0'; timeBuffer[8] = '\0';
 }
 void welcomeScreen() {
   u8g2.clearBuffer();
@@ -403,6 +407,10 @@ void sendSlaveStartingData() {
   EEPROM.get(eepromIdx[2], currWheelCirc);
   EEPROM.get(eepromIdx[3], lightOption);
 
+  if (lightOption ==0){
+    lightOption = 1;
+  }
+
   Serial1.print('<');
   Serial1.print(CMD_WHEEL_DATA);
   Serial1.print(currWheelCirc);
@@ -418,10 +426,10 @@ void sendSlaveStartingData() {
 
 void handleBtn1Menus() {
 
-  //  Serial.print("viewingScreen: ");
-  //  Serial.println(viewingScreen);
-  //  Serial.print("MenuOption: ");
-  //  Serial.println(menuOption);
+//    Serial.print("viewingScreen: ");
+//    Serial.println(viewingScreen);
+//    Serial.print("MenuOption: ");
+//    Serial.println(menuOption);
   if (viewingScreen == 0) {
     if (menuOption == 3) {  //exit menu
       inMenuMode = false;
@@ -436,10 +444,10 @@ void handleBtn1Menus() {
     } else if (menuOption == 0 || menuOption == 1) {  //display Wheel circ menu
       viewingScreen = 1;
       menuWheelCirc();
-	}else if (menuOption == 2){  //display lights menu
-		viewingScreen = 2;
-		menuLightStatus();
-    } else {  	//displaying menu (init)
+    } else if (menuOption == 2) { //display lights menu
+      viewingScreen = 2;
+      menuLightStatus();
+    } else {    //displaying menu (init)
       inMenuMode = true;
       menuOption = 0;
       printMenuList();
@@ -454,32 +462,37 @@ void handleBtn1Menus() {
     Serial1.print(currWheelCirc);
     Serial1.print('>');
     printMenuList();
-  }else if (viewingScreen == 2){
-	viewingScreen = 0;
+  } else if (viewingScreen == 2) {
+    viewingScreen = 0;
     menuOption = 2;
-  
-	EEPROM.put(eepromIdx[3], lightOption);
-	Serial1.print('<');
+
+    EEPROM.put(eepromIdx[3], lightOption);
+    Serial1.print('<');
     Serial1.print(CMD_LIGHT_DATA);
     Serial1.print(lightOption);
     Serial1.print('>');
     printMenuList();
-	
+
   }
+
+//  Serial.print("OUT viewingScreen: ");
+//    Serial.println(viewingScreen);
+//    Serial.print("MenuOption: ");
+//    Serial.println(menuOption);
 }
 
 void handleBtn2() {
 
-  //    Serial.print("viewingScreen: ");
-  //  Serial.println(viewingScreen);
-  //  Serial.print("currWheelCirc: ");
-  //  Serial.println(currWheelCirc);
+//      Serial.print("viewingScreen: ");
+//    Serial.println(viewingScreen);
+//    Serial.print("lightOption: ");
+//    Serial.println(lightOption);
   if (viewingScreen == 0) {
     if (menuOption == 3) {  //if on exit, go to light option
       menuOption = 2;
     } else if (menuOption == 2) { //if on light , got to wheel option
       menuOption = 0;
-    } else { 
+    } else {
       menuOption = 3;
     }
     printMenuList();
@@ -491,15 +504,15 @@ void handleBtn2() {
       currWheelCirc ++;
     }
     menuWheelCirc();
-  }else if (viewingScreen == 2){
-     if (lightOption == 1){
-		lightOption = 3;
-	 }else if (lightOption == 3){
-		lightOption = 2;
-	 }else if (lightOption == 2){
-		lightOption = 1;
-	 }
-	 menuLightStatus();
+  } else if (viewingScreen == 2) {
+    if (lightOption == 1) {
+      lightOption = 3;
+    } else if (lightOption == 3) {
+      lightOption = 2;
+    } else if (lightOption == 2) {
+      lightOption = 1;
+    }
+    menuLightStatus();
   }
 }
 
@@ -520,15 +533,15 @@ void handleBtn3() {
       currWheelCirc --;
     }
     menuWheelCirc();
-  } else if (viewingScreen == 2){
-     if (lightOption == 1){
-		lightOption = 2;
-	 }else if (lightOption == 2){
-		lightOption = 3;
-	 }else if (lightOption == 3){
-		lightOption = 1;
-	 }
-	 menuLightStatus();
+  } else if (viewingScreen == 2) {
+    if (lightOption == 1) {
+      lightOption = 2;
+    } else if (lightOption == 2) {
+      lightOption = 3;
+    } else if (lightOption == 3) {
+      lightOption = 1;
+    }
+    menuLightStatus();
   }
 }
 
@@ -552,14 +565,14 @@ void menuWheelCirc() {
     menu_temp_storage);  //alex
 }
 
-		void menuLightStatus() {   //alex
-		 
-		  u8g2.setFont(u8g2_font_6x12_tr);
-		  u8g2.userInterfaceSelectionListNB(
-			"Light Option",
-			lightOption,
-			menu_light_txt);
-		}   //alex
+void menuLightStatus() {   //alex
+
+  u8g2.setFont(u8g2_font_6x12_tr);
+  u8g2.userInterfaceSelectionListNB(
+    "Light Option",
+    lightOption,
+    menu_light_txt);
+}   //alex
 
 void handleSerialRead() {
 
