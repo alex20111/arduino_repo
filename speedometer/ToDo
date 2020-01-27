@@ -2,6 +2,8 @@ screen: 44mm(l)
  by 37mm by 10mm(h)
 CODE: coding need to be done
 HW : hardware need to be done
+CODE: add enum to lib
+CODE: Add code to master for printing light percent.  
 
 --------------TODO---------------
 CODE/HW: add battery reading
@@ -13,9 +15,19 @@ CODE   : Shift text to left when batt is 100%. text is getting cutoff for batter
 
 ---------------TEST--------------
 
+CODE: test new elapsed time in interrupt (10 millis).
+CODE: add code for light button when increasing or decreasing % in handleBTN for MASTER
+CODE/HW: test and install LDR 
+CODE: test save speed in 1 min.
 
 ------------TEST DONE--------------
 CODE   : ADD LDR menu to mega. Option to enable or disable auto lights.
 Upload code to uno to correct odo reset.
 Have timer start and stop when he speed is greater than 0
 reset timer when odo is reset
+
+enum LightState { //create a OdoEnums.h for this.
+  LIGHT_AUTO = 1, //lights on automatic (for on/off)
+  LIGHT_ON, // Lights always on
+  LIGH_OFF //  lights always off.
+};
