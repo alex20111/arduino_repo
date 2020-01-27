@@ -1,11 +1,13 @@
 #include <JC_Button.h>
 #include <Arduino.h>
+#include <OdoEnums.h>
 
 #define HALL_SWITCH  2
 #define BTN_1        4
 #define BTN_2        5
 #define BTN_3        6
 #define LIGHT_MOSFET 7
+#define LDR A0
 
 // speedometer variables
 boolean inMetric = true;
@@ -24,7 +26,9 @@ boolean newData = false;
 
 //light//
 uint8_t lightPower = 100;  //0 to 100
+int ldrValue = 0;
 boolean lightOn = false;
+LightState lightState = LIGHT_AUTO;
 
 //button debounce
 //Button btnOne(BTN_1); // Instantiate a Bounce object
@@ -63,6 +67,8 @@ void setup(void) {
   attachInterrupt(digitalPinToInterrupt(HALL_SWITCH), speedInt, FALLING );
 
   pinMode(HALL_SWITCH, INPUT);
+  pinMode(LIGHT_MOSFET, OUTPUT);
+  pinMode(LDR, INPUT);
 
   btnOne.begin();
   btnTwo.begin();
@@ -75,10 +81,15 @@ void setup(void) {
   Serial.print(CMD_SLAVE_READY);
   Serial.print('>');
 
-  start = millis();
+  speedoStopped = true;
 }
 
 void loop(void) {
+
+
+  processLdr(); //read LDR info
+  
+  turnOnOfflights(); 
 
   verifySpeed();
 
@@ -91,43 +102,46 @@ void loop(void) {
 
 void speedInt() { //interrupt
 
-  if (speedoStopped) { //if we stopped we need to reset the start so the elapse won't be a big value.
-    start = millis();
-    saveSent = false;
-    speedoStopped = false;
+  if (speedoStopped ) { //if we stopped we need to reset the start so the elapse won't be a big value.
+	start = millis();
+	saveSent = false;
+	speedoStopped = false;
   }
 
   elapsed = millis() - start;
   start = millis();
-  revolutionCount++;
+  
+  if (elapsed > 10){//only record if elapsed is grather than 10 millis to prevent quick interrupts.
+	  revolutionCount++;
 
-  if (inMetric) {
-    speedDisplay = (3600 * ((float)wheelCir / 100.00) ) / elapsed;
-    currentDistance = revolutionCount * ((float)wheelCir / 100.00) / 1000.00;
-    //speedDisplay = (3600 * (wheelCir * .62137) ) / elapsed //in MPH
-  }
-//  Serial.println(wheelCir);
-
+	  if (inMetric) {
+		speedDisplay = (3600 * ((float)wheelCir / 100.00) ) / elapsed;
+		currentDistance = revolutionCount * ((float)wheelCir / 100.00) / 1000.00;
+		//speedDisplay = (3600 * (wheelCir * .62137) ) / elapsed //in MPH
+	  }
+	}
+}
 }
 void verifySpeed() {
 
-  long idleMillis = (millis() - start);
+  long idleMillis = (millis() - start);  
   if ( idleMillis  > 2000 ) { //idle more than 3 seconds. turn to 0
 
     if (speedDisplay != 0) {
       speedDisplay = 0;
-      speedoStopped = true;
+      speedoStopped = true;	  
     }
 
     if (idleMillis > 5000 && !saveSent && speedDisplay == 0 && started) {
       //send message
       sendSaveOdoCommand();
     }
+	
   }
   if (speedDisplay > 0 &&  (millis() - countDown) > 60000) { //1 min
     //save
     sendSaveOdoCommand();
-  } else {
+  } else if(speedDisplay  < 2) {
     countDown = millis();
   }
 
@@ -149,12 +163,12 @@ void sendInfoToDsp() {
   Serial.print('<'); Serial.print(CMD_SEND_TO_DSP);
   Serial.print(speedDisplay); //speed
   Serial.print('-');
-  Serial.print(lightOn == true ? 'o' : 'd');
+  Serial.print(lightOn == true ? 'o' : 'd'); //o = ON / d= dark or off
   Serial.print(lightPower);
   Serial.print('-');
   Serial.print(currentDistance);
   Serial.print('>');
-//  Serial.flush();
+  //Serial.flush();
 }
 void processBtns() {
   btnOne.read();
@@ -188,6 +202,7 @@ void processBtns() {
     Serial.print(CMD_BTN2_SHORT);
 
     if (!inMenu) { //if not in menu, send the light power information
+	  Serial.print(CMD_LIGHT_STATUS);
       lightPower = lightPower + 10;
       Serial.print(lightOn == true ? 'o' : 'd' );
       Serial.print(lightPower);
@@ -202,14 +217,46 @@ void processBtns() {
     Serial.print(CMD_BTN3_SHORT);
 
     if (!inMenu) { //if not in menu, send the light power information
+	  Serial.print(CMD_LIGHT_STATUS);
       lightPower = lightPower - 10;
       Serial.print(lightOn == true ? 'o' : 'd' );
       Serial.print(lightPower);
     }
     Serial.print('>');
     Serial.flush();
-
   }
+}
+void processLdr(){
+
+if (lightState == LIGHT_AUTO){
+	ldrValue = analogRead(LDR);  
+	 
+	Serial.print("Analog reading = ");
+	Serial.print(ldrValue);     // the raw analog reading
+	 
+	  // We'll have a few threshholds, qualitatively determined
+	  if (ldrValue < 10) {
+	   lightOn = false; 
+	  } else {
+		lightOn = true;
+	  }	  
+  }
+}
+void turnOnOfflights(){
+
+	int mosfetStatus = digitalRead(LIGHT_MOSFET);
+	
+	if (lightState == LIGHT_AUTO){
+		if (lightOn && mosfetStatus == LOW){
+			digitalWrite(LIGHT_MOSFET, HIGH);
+		}else if (!lightOn && mosfetStatus == HIGH){
+			digitalWrite(LIGHT_MOSFET, LOW);
+		}
+	}else if (lightState == LIGHT_ON && mosfetStatus == LOW){	
+		digitalWrite(LIGHT_MOSFET, HIGH);		
+	}else if (lightState == LIGHT_OFF && mosfetStatus == HIGH){
+		digitalWrite(LIGHT_MOSFET, LOW);	
+	}
 
 }
 void handleSerialRead() {
@@ -231,11 +278,7 @@ void handleSerialRead() {
           wheelCir = atoi(bufferCirc); //convert to int
         break;
       case CMD_LIGHT_DATA:
-        if (receivedChars[1] == '0') {
-          lightOn = true;
-        } else {
-          lightOn = false;
-        }
+		lightState = static_cast<Enum>(receivedChars[1]);
         break;
       case CMD_DUMP_DATA:  //request to send display information
         debugDump();
