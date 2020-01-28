@@ -7,7 +7,7 @@
 #define BTN_2        5
 #define BTN_3        6
 #define LIGHT_MOSFET 7
-#define LDR A0
+#define LDR A0     // V ------ LDR -- PIN(A0) --- /\/\/\ ---- GR  
 
 // speedometer variables
 boolean inMetric = true;
@@ -25,7 +25,7 @@ char receivedChars[numChars];
 boolean newData = false;
 
 //light//
-uint8_t lightPower = 100;  //0 to 100
+uint8_t lightPower = 50;  //0 to 100
 int ldrValue = 0;
 boolean lightOn = false;
 LightState lightState = LIGHT_AUTO;
@@ -51,12 +51,13 @@ const char CMD_LIGHT_DATA   = 'C'; // options: Send to slave on startup for ligh
 
 const char CMD_DUMP_DATA    = 'z'; // options:Debugging function, dump data UNO only.
 
-boolean inMenu = false;
+boolean inMenu = false;  //specify if the buttons are in menu function
 boolean saveSent = false;
 boolean resetOdoSent = false;
 boolean speedoStopped = false;
-
 boolean started = false;
+
+boolean triggerDSPRefresh = false; // triger a display refresh.
 
 //timers
 unsigned long countDown = 0;
@@ -94,6 +95,11 @@ void loop(void) {
   verifySpeed();
 
   processBtns();
+  
+  if (triggerDSPRefresh){
+	sendInfoToDsp();
+	triggerDSPRefresh = false;
+  }
 
   recvWithStartEndMarkers() ;
 
@@ -168,7 +174,7 @@ void sendInfoToDsp() {
   Serial.print('-');
   Serial.print(currentDistance);
   Serial.print('>');
-  //Serial.flush();
+  Serial.flush();
 }
 void processBtns() {
   btnOne.read();
@@ -202,13 +208,14 @@ void processBtns() {
     Serial.print(CMD_BTN2_SHORT);
 
     if (!inMenu) { //if not in menu, send the light power information
-	  Serial.print(CMD_LIGHT_STATUS);
-      lightPower = lightPower + 10;
-      Serial.print(lightOn == true ? 'o' : 'd' );
-      Serial.print(lightPower);
+	 if (lightPower < 100){
+		lightPower = lightPower + 10;
+		triggerDSPRefresh = true;
+	 }
+	  
+
     }
     Serial.print('>');
-    Serial.flush();
   }
 
   btnThree.read();
@@ -217,13 +224,12 @@ void processBtns() {
     Serial.print(CMD_BTN3_SHORT);
 
     if (!inMenu) { //if not in menu, send the light power information
-	  Serial.print(CMD_LIGHT_STATUS);
-      lightPower = lightPower - 10;
-      Serial.print(lightOn == true ? 'o' : 'd' );
-      Serial.print(lightPower);
+	  if (lightPower > 0){	
+		lightPower = lightPower - 10;
+		triggerDSPRefresh = true;
+	   }
     }
     Serial.print('>');
-    Serial.flush();
   }
 }
 void processLdr(){
@@ -231,14 +237,14 @@ void processLdr(){
 if (lightState == LIGHT_AUTO){
 	ldrValue = analogRead(LDR);  
 	 
-	Serial.print("Analog reading = ");
-	Serial.print(ldrValue);     // the raw analog reading
+	//Serial.print("Analog reading = ");
+	//Serial.print(ldrValue);     // the raw analog reading
 	 
 	  // We'll have a few threshholds, qualitatively determined
 	  if (ldrValue < 10) {
-	   lightOn = false; 
+	   lightOn = true; 
 	  } else {
-		lightOn = true;
+		lightOn = false;
 	  }	  
   }
 }
