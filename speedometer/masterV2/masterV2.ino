@@ -3,8 +3,11 @@
 #include <U8g2lib.h>
 #include <EEPROM.h>
 #include "bitmap.h"
+#include <OdoEnums.h>
 
 #include <Battery.h> //https://github.com/rlogiacco/BatterySense#double-cell-li-ion-2s-on-5v-mcu
+
+//ENUM LINKS: https://forum.arduino.cc/index.php?topic=88087.0
 
 #ifdef U8X8_HAVE_HW_SPI
 #include <SPI.h>
@@ -23,7 +26,7 @@
 
 U8G2_SSD1327_MIDAS_128X128_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/ U8g2_CS, /* dc=*/ U8g2_DC, /* reset=*/ U8g2_RESET);
 //EEPROM IDX
-uint8_t eepromIdx[] = {0, 4, 8, 9}; //saves in EEPROM. 0=totalOdo(4byte), 4=currOdo(4b),8=currWheelCirc(1b), 9=lightOption(1b), 10 --> to be next
+uint8_t eepromIdx[] = {0, 4, 8, 9}; //saves in EEPROM. 0=totalOdo(4byte), 4=currOdo(4b),8=currWheelCirc(1b), 9=lightOption(1b), 11 --> to be next
 
 // speedometer display
 long totalOdo = 0;   //Saved in EEPROM eepromIdx[0]
@@ -39,6 +42,8 @@ char timeBuffer[10];
 char speedBuffer[5];
 //light
 char lightBuffer[6];
+char lightDisplay[4];
+boolean lightOn = false;
 
 //temperature//
 // which analog pin to connect
@@ -86,14 +91,14 @@ const char *main_menu_list =
   "Exit";
 const char *menu_wheel_size_txt =
   "UP / DOWN to change\n"
-  "BTN 1 for select/exit"; //alex
+  "BTN 1 for select/exit"; //add PROGMEM
 
-const char *menu_light_txt = //alex
+const char *menu_light_txt = //add PROGMEM
   "AUTO\n"
   "ON\n"
   "OFF\n";
 
-char menu_temp_storage[46];  //alex
+char menu_temp_storage[46];  ///add PROGMEM
 
 //BATTERY
 Battery batt = Battery(7400, 8400, BATTERY);   //TODO, use voltage divider to sample battery power
@@ -153,7 +158,7 @@ void setup(void) {
 
   chrono.reset();
   resetTimeBuffer();
-  totalOdo = 0;
+  //totalOdo = 0;
 }
 //MAIN LOOP//
 void loop(void) {
@@ -185,7 +190,12 @@ void displayMainScreen() {
     u8g2.setCursor(111, 21);
     u8g2.print(battBuffer);
 
-    u8g2.drawXBMP( 0, 0, 16, 16, light_bitmap);
+	if (lightOn){
+		u8g2.drawXBMP( 0, 0, 16, 16, light_bitmap);
+		u8g2.setCursor(0, 21);
+		u8g2.print(lightDisplay);
+	}
+	
     u8g2.setCursor(50, 10); //temperature
     u8g2.print(temperature); //temperature
     //      u8g2.setFont/(u8g2_font_6x10_tr);
@@ -206,8 +216,6 @@ void displayMainScreen() {
 
     //  u8g2.setFont(u8g2_font_fub42_tr);
     u8g2.setFont(u8g2_font_7Segments_26x42_mn);
-    //    Serial.print(F("len:"));
-    //    Serial.println(strlen(speedBuffer)); //DEBUG
     if (strlen(speedBuffer) < 2) {
       u8g2.setCursor(50, 82);
     } else {
@@ -240,18 +248,7 @@ void timerCalculation() {
     over = over % 60000;
     int runSeconds = int(over / 1000);
 
-    //Serial.println("");
-    //  Serial.print(F("timeInMillis:"));
-    //  Serial.print(timeInMillis);
-    //  Serial.print(F("Hours:" ));
-    //  Serial.println(runHours);
-    //  Serial.print(F("Minutes:" ));
-    //  Serial.println(runMinutes);
-    //  Serial.print(F("seconds:" ));
-    //  Serial.println(runSeconds);
-
     sprintf(timeBuffer, "%02d:%02d:%02d", runHours, runMinutes, runSeconds); ///user a lot.. may if running out , replace
-
   }
 }
 
@@ -328,14 +325,30 @@ void handleDisplayVar() {
     totalOdo++;
   }
 
-
   sprintf(odoDspFormatted, "%s/%06ld", currOdoBuffer, totalOdo);
-
-  //  Serial.print(F("odoDspFormatted: "));
-  //  Serial.println(odoDspFormatted);
-  //  Serial.print(F("Total odo: "));
-  //  Serial.println(totalOdo);
-
+  
+  //format light
+  if (lightBuffer[0] =='o'){
+	lightOn = true;
+  }else {
+	lightOn = false;
+  }   
+  if (lightOn && strlen(lightBuffer) == 4){   //o100  = 4 , o30 = 3, o0
+	lightDisplay[0] = lightBuffer[1];
+	lightDisplay[1] = lightBuffer[2];
+	lightDisplay[2] = lightBuffer[3];
+	lightDisplay[3] = "%";
+	lightDisplay[4] = "\0";
+   }else   if (lightOn && strlen(lightBuffer) == 3){   //o100  = 4 , o30 = 3, o0
+	lightDisplay[0] = lightBuffer[1];
+	lightDisplay[1] = lightBuffer[2];	
+	lightDisplay[2] = "%";
+	lightDisplay[3] = "\0";
+   } else   if (lightOn && strlen(lightBuffer) == 2){   //o100  = 4 , o30 = 3, o0
+	lightDisplay[0] = lightBuffer[1];
+	lightDisplay[1] = "%";
+	lightDisplay[2] = "\0";
+   }
 }
 
 void readTemperatureTherm() {
@@ -421,7 +434,6 @@ void sendSlaveStartingData() {
   Serial1.print(lightOption);
   Serial1.print('>');
   Serial1.flush();
-
 }
 
 void handleBtn1Menus() {
@@ -474,19 +486,15 @@ void handleBtn1Menus() {
     printMenuList();
 
   }
-
-//  Serial.print("OUT viewingScreen: ");
-//    Serial.println(viewingScreen);
-//    Serial.print("MenuOption: ");
-//    Serial.println(menuOption);
 }
 
-void handleBtn2() {
+void handleMenuBtn2() {
 
 //      Serial.print("viewingScreen: ");
 //    Serial.println(viewingScreen);
 //    Serial.print("lightOption: ");
 //    Serial.println(lightOption);
+
   if (viewingScreen == 0) {
     if (menuOption == 3) {  //if on exit, go to light option
       menuOption = 2;
@@ -596,16 +604,15 @@ void handleSerialRead() {
         break;
       case CMD_BTN2_SHORT: //up
         Serial.println(F("BTN2 short"));
-        handleBtn2();
+		handleMenuBtn2();
         break;
       case CMD_BTN1_MENU:
         Serial.println(F("CMD_BTN1_MENU"));
         handleBtn1Menus();
-
         break;
       case CMD_BTN3_SHORT: //down
         Serial.println(F("CMD_BTN3_SHORT"));
-        handleBtn3();
+		handleBtn3();
         break;
       case 'Z': //DEBUG
         requestToDisplay();
