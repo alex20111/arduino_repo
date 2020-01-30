@@ -1,6 +1,6 @@
 #include <JC_Button.h>
 #include <Arduino.h>
-#include <OdoEnums.h>
+#include "OdoEnums.h"
 
 #define HALL_SWITCH  2
 #define BTN_1        4
@@ -89,16 +89,16 @@ void loop(void) {
 
 
   processLdr(); //read LDR info
-  
-  turnOnOfflights(); 
+
+  turnOnOfflights();
 
   verifySpeed();
 
   processBtns();
-  
-  if (triggerDSPRefresh){
-	sendInfoToDsp();
-	triggerDSPRefresh = false;
+
+  if (triggerDSPRefresh) {
+    sendInfoToDsp();
+    triggerDSPRefresh = false;
   }
 
   recvWithStartEndMarkers() ;
@@ -109,45 +109,44 @@ void loop(void) {
 void speedInt() { //interrupt
 
   if (speedoStopped ) { //if we stopped we need to reset the start so the elapse won't be a big value.
-	start = millis();
-	saveSent = false;
-	speedoStopped = false;
+    start = millis();
+    saveSent = false;
+    speedoStopped = false;
   }
 
   elapsed = millis() - start;
   start = millis();
-  
-  if (elapsed > 10){//only record if elapsed is grather than 10 millis to prevent quick interrupts.
-	  revolutionCount++;
 
-	  if (inMetric) {
-		speedDisplay = (3600 * ((float)wheelCir / 100.00) ) / elapsed;
-		currentDistance = revolutionCount * ((float)wheelCir / 100.00) / 1000.00;
-		//speedDisplay = (3600 * (wheelCir * .62137) ) / elapsed //in MPH
-	  }
-	}
-}
+  if (elapsed > 10) { //only record if elapsed is grather than 10 millis to prevent quick interrupts.
+    revolutionCount++;
+
+    if (inMetric) {
+      speedDisplay = (3600 * ((float)wheelCir / 100.00) ) / elapsed;
+      currentDistance = revolutionCount * ((float)wheelCir / 100.00) / 1000.00;
+      //speedDisplay = (3600 * (wheelCir * .62137) ) / elapsed //in MPH
+    }
+  }
 }
 void verifySpeed() {
 
-  long idleMillis = (millis() - start);  
+  long idleMillis = (millis() - start);
   if ( idleMillis  > 2000 ) { //idle more than 3 seconds. turn to 0
 
     if (speedDisplay != 0) {
       speedDisplay = 0;
-      speedoStopped = true;	  
+      speedoStopped = true;
     }
 
     if (idleMillis > 5000 && !saveSent && speedDisplay == 0 && started) {
       //send message
       sendSaveOdoCommand();
     }
-	
+
   }
   if (speedDisplay > 0 &&  (millis() - countDown) > 60000) { //1 min
     //save
     sendSaveOdoCommand();
-  } else if(speedDisplay  < 2) {
+  } else if (speedDisplay  < 2) {
     countDown = millis();
   }
 
@@ -208,12 +207,10 @@ void processBtns() {
     Serial.print(CMD_BTN2_SHORT);
 
     if (!inMenu) { //if not in menu, send the light power information
-	 if (lightPower < 100){
-		lightPower = lightPower + 10;
-		triggerDSPRefresh = true;
-	 }
-	  
-
+      if (lightPower < 100) {
+        lightPower = lightPower + 10;
+        triggerDSPRefresh = true;
+      }
     }
     Serial.print('>');
   }
@@ -224,51 +221,58 @@ void processBtns() {
     Serial.print(CMD_BTN3_SHORT);
 
     if (!inMenu) { //if not in menu, send the light power information
-	  if (lightPower > 0){	
-		lightPower = lightPower - 10;
-		triggerDSPRefresh = true;
-	   }
+      if (lightPower > 0) {
+        lightPower = lightPower - 10;
+        triggerDSPRefresh = true;
+      }
     }
     Serial.print('>');
   }
 }
-void processLdr(){
+void processLdr() {
 
-if (lightState == LIGHT_AUTO){
-	ldrValue = analogRead(LDR);  
-	 
-	//Serial.print("Analog reading = ");
-	//Serial.print(ldrValue);     // the raw analog reading
-	 
-	  // We'll have a few threshholds, qualitatively determined
-	  if (ldrValue < 10) {
-	   lightOn = true; 
-	  } else {
-		lightOn = false;
-	  }	  
+  if (lightState == LIGHT_AUTO) {
+  boolean currLightStatus = lightOn;
+    
+    ldrValue = analogRead(LDR);
+  
+    //Serial.print("Analog reading = ");
+    //Serial.print(ldrValue);     // the raw analog reading
+
+    // We'll have a few threshholds, qualitatively determined
+    if (ldrValue < 70) {
+      lightOn = true;
+    } else {
+      lightOn = false;
+    }
+
+    if (lightOn != currLightStatus){//if status not the same as the previous one, refresh display
+      triggerDSPRefresh = true;
+    }
+    
   }
 }
-void turnOnOfflights(){
+void turnOnOfflights() {
 
-	int mosfetStatus = digitalRead(LIGHT_MOSFET);
-	
-	if (lightState == LIGHT_AUTO){
-		if (lightOn && mosfetStatus == LOW){
-			digitalWrite(LIGHT_MOSFET, HIGH);
-		}else if (!lightOn && mosfetStatus == HIGH){
-			digitalWrite(LIGHT_MOSFET, LOW);
-		}
-	}else if (lightState == LIGHT_ON && mosfetStatus == LOW){	
-		digitalWrite(LIGHT_MOSFET, HIGH);		
-	}else if (lightState == LIGHT_OFF && mosfetStatus == HIGH){
-		digitalWrite(LIGHT_MOSFET, LOW);	
-	}
+  int mosfetStatus = digitalRead(LIGHT_MOSFET);
+
+  if (lightState == LIGHT_AUTO) {
+    if (lightOn && mosfetStatus == LOW) {
+      digitalWrite(LIGHT_MOSFET, HIGH);
+    } else if (!lightOn && mosfetStatus == HIGH) {
+      digitalWrite(LIGHT_MOSFET, LOW);
+    }
+  } else if (lightState == LIGHT_ON && mosfetStatus == LOW) {
+    digitalWrite(LIGHT_MOSFET, HIGH);
+  } else if (lightState == LIGHT_OFF && mosfetStatus == HIGH) {
+    digitalWrite(LIGHT_MOSFET, LOW);
+  }
 
 }
 void handleSerialRead() {
   if (newData == true) {
     newData = false;
-    
+
     switch (receivedChars[0]) {
       case CMD_SEND_TO_DSP:  //request to send display information
         sendInfoToDsp();
@@ -281,10 +285,11 @@ void handleSerialRead() {
         bufferCirc[0] = receivedChars[1];
         bufferCirc[1] = receivedChars[2];
         bufferCirc[2] = receivedChars[3];
-          wheelCir = atoi(bufferCirc); //convert to int
+        wheelCir = atoi(bufferCirc); //convert to int
         break;
       case CMD_LIGHT_DATA:
-		lightState = static_cast<Enum>(receivedChars[1]);
+        lightState = (int)receivedChars;
+        //    lightState = LIGHT_AUTO;
         break;
       case CMD_DUMP_DATA:  //request to send display information
         debugDump();

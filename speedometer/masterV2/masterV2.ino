@@ -3,7 +3,7 @@
 #include <U8g2lib.h>
 #include <EEPROM.h>
 #include "bitmap.h"
-#include <OdoEnums.h>
+#include "OdoEnums.h"
 
 #include <Battery.h> //https://github.com/rlogiacco/BatterySense#double-cell-li-ion-2s-on-5v-mcu
 
@@ -190,12 +190,12 @@ void displayMainScreen() {
     u8g2.setCursor(111, 21);
     u8g2.print(battBuffer);
 
-	if (lightOn){
-		u8g2.drawXBMP( 0, 0, 16, 16, light_bitmap);
-		u8g2.setCursor(0, 21);
-		u8g2.print(lightDisplay);
-	}
-	
+    if (lightOn) {
+      u8g2.drawXBMP( 0, 0, 16, 16, light_bitmap);
+      u8g2.setCursor(0, 21);
+      u8g2.print(lightDisplay);
+    }
+
     u8g2.setCursor(50, 10); //temperature
     u8g2.print(temperature); //temperature
     //      u8g2.setFont/(u8g2_font_6x10_tr);
@@ -326,29 +326,29 @@ void handleDisplayVar() {
   }
 
   sprintf(odoDspFormatted, "%s/%06ld", currOdoBuffer, totalOdo);
-  
+
   //format light
-  if (lightBuffer[0] =='o'){
-	lightOn = true;
-  }else {
-	lightOn = false;
-  }   
-  if (lightOn && strlen(lightBuffer) == 4){   //o100  = 4 , o30 = 3, o0
-	lightDisplay[0] = lightBuffer[1];
-	lightDisplay[1] = lightBuffer[2];
-	lightDisplay[2] = lightBuffer[3];
-	lightDisplay[3] = "%";
-	lightDisplay[4] = "\0";
-   }else   if (lightOn && strlen(lightBuffer) == 3){   //o100  = 4 , o30 = 3, o0
-	lightDisplay[0] = lightBuffer[1];
-	lightDisplay[1] = lightBuffer[2];	
-	lightDisplay[2] = "%";
-	lightDisplay[3] = "\0";
-   } else   if (lightOn && strlen(lightBuffer) == 2){   //o100  = 4 , o30 = 3, o0
-	lightDisplay[0] = lightBuffer[1];
-	lightDisplay[1] = "%";
-	lightDisplay[2] = "\0";
-   }
+  if (lightBuffer[0] == 'o') {
+    lightOn = true;
+  } else {
+    lightOn = false;
+  }
+  if (lightOn && strlen(lightBuffer) == 4) {  //o100  = 4 , o30 = 3, o0
+    lightDisplay[0] = lightBuffer[1];
+    lightDisplay[1] = lightBuffer[2];
+    lightDisplay[2] = lightBuffer[3];
+    lightDisplay[3] = "%";
+    lightDisplay[4] = "\0";
+  } else   if (lightOn && strlen(lightBuffer) == 3) {  //o100  = 4 , o30 = 3, o0
+    lightDisplay[0] = lightBuffer[1];
+    lightDisplay[1] = lightBuffer[2];
+    lightDisplay[2] = "%";
+    lightDisplay[3] = "\0";
+  } else   if (lightOn && strlen(lightBuffer) == 2) {  //o100  = 4 , o30 = 3, o0
+    lightDisplay[0] = lightBuffer[1];
+    lightDisplay[1] = "%";
+    lightDisplay[2] = "\0";
+  }
 }
 
 void readTemperatureTherm() {
@@ -420,7 +420,7 @@ void sendSlaveStartingData() {
   EEPROM.get(eepromIdx[2], currWheelCirc);
   EEPROM.get(eepromIdx[3], lightOption);
 
-  if (lightOption ==0){
+  if (lightOption == 0) {
     lightOption = 1;
   }
 
@@ -438,10 +438,10 @@ void sendSlaveStartingData() {
 
 void handleBtn1Menus() {
 
-//    Serial.print("viewingScreen: ");
-//    Serial.println(viewingScreen);
-//    Serial.print("MenuOption: ");
-//    Serial.println(menuOption);
+  //    Serial.print("viewingScreen: ");
+  //    Serial.println(viewingScreen);
+  //    Serial.print("MenuOption: ");
+  //    Serial.println(menuOption);
   if (viewingScreen == 0) {
     if (menuOption == 3) {  //exit menu
       inMenuMode = false;
@@ -490,10 +490,10 @@ void handleBtn1Menus() {
 
 void handleMenuBtn2() {
 
-//      Serial.print("viewingScreen: ");
-//    Serial.println(viewingScreen);
-//    Serial.print("lightOption: ");
-//    Serial.println(lightOption);
+  //      Serial.print("viewingScreen: ");
+  //    Serial.println(viewingScreen);
+  //    Serial.print("lightOption: ");
+  //    Serial.println(lightOption);
 
   if (viewingScreen == 0) {
     if (menuOption == 3) {  //if on exit, go to light option
@@ -604,7 +604,7 @@ void handleSerialRead() {
         break;
       case CMD_BTN2_SHORT: //up
         Serial.println(F("BTN2 short"));
-		handleMenuBtn2();
+        handleMenuBtn2();
         break;
       case CMD_BTN1_MENU:
         Serial.println(F("CMD_BTN1_MENU"));
@@ -612,7 +612,7 @@ void handleSerialRead() {
         break;
       case CMD_BTN3_SHORT: //down
         Serial.println(F("CMD_BTN3_SHORT"));
-		handleBtn3();
+        handleBtn3();
         break;
       case 'Z': //DEBUG
         requestToDisplay();

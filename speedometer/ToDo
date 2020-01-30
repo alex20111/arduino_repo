@@ -3,18 +3,19 @@ screen: 44mm(l)
 CODE: coding need to be done
 HW : hardware need to be done
 CODE: add enum to lib
-CODE: Add code to master for printing light percent.  
+
 
 --------------TODO---------------
 CODE/HW: add battery reading
-CODE/HW: ADD ldr to UNO  -- NEXT
 CODE/HW: add mosfet control to light.
 CODE   : pass current odo information to arduino if not reset on startup. Right now currentOdo start at 0 every reboot.
 CODE   : save timer into eeprom when turning off. when reset, reset timer in eeprom also
 CODE   : Shift text to left when batt is 100%. text is getting cutoff for battery
 
+
 ---------------TEST--------------
 
+CODE   : Add code to master for printing light percent.  
 CODE: test new elapsed time in interrupt (10 millis).
 CODE: add code for light button when increasing or decreasing % in handleBTN for MASTER
 CODE/HW: test and install LDR 
