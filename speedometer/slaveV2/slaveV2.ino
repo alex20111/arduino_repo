@@ -96,14 +96,16 @@ void loop(void) {
 
   processBtns();
 
-  if (triggerDSPRefresh) {
-    sendInfoToDsp();
-    triggerDSPRefresh = false;
-  }
+  //  if (triggerDSPRefresh) {
+  //    sendInfoToDsp();
+  //    triggerDSPRefresh = false;
+  //  }
 
   recvWithStartEndMarkers() ;
 
   handleSerialRead();
+
+  //  Serial.println(ldrValue);
 }
 
 void speedInt() { //interrupt
@@ -117,15 +119,14 @@ void speedInt() { //interrupt
   elapsed = millis() - start;
   start = millis();
 
-  if (elapsed > 10) { //only record if elapsed is grather than 10 millis to prevent quick interrupts.
-    revolutionCount++;
+  revolutionCount++;
 
-    if (inMetric) {
-      speedDisplay = (3600 * ((float)wheelCir / 100.00) ) / elapsed;
-      currentDistance = revolutionCount * ((float)wheelCir / 100.00) / 1000.00;
-      //speedDisplay = (3600 * (wheelCir * .62137) ) / elapsed //in MPH
-    }
+  if (inMetric) {
+    speedDisplay = (3600 * ((float)wheelCir / 100.00) ) / elapsed;
+    currentDistance = revolutionCount * ((float)wheelCir / 100.00) / 1000.00;
+    //speedDisplay = (3600 * (wheelCir * .62137) ) / elapsed //in MPH
   }
+
 }
 void verifySpeed() {
 
@@ -140,12 +141,14 @@ void verifySpeed() {
     if (idleMillis > 5000 && !saveSent && speedDisplay == 0 && started) {
       //send message
       sendSaveOdoCommand();
+      saveSent = true;
     }
 
   }
-  if (speedDisplay > 0 &&  (millis() - countDown) > 60000) { //1 min
+  if (speedDisplay > 1 &&  (millis() - countDown) > 300000) { //1 min
     //save
     sendSaveOdoCommand();
+    countDown = millis();
   } else if (speedDisplay  < 2) {
     countDown = millis();
   }
@@ -155,7 +158,6 @@ void verifySpeed() {
   }
 }
 void sendSaveOdoCommand() {
-  saveSent = true;
   Serial.print('<');
   Serial.print(CMD_SAVE_ODO);
   Serial.print('>');
@@ -168,7 +170,7 @@ void sendInfoToDsp() {
   Serial.print('<'); Serial.print(CMD_SEND_TO_DSP);
   Serial.print(speedDisplay); //speed
   Serial.print('-');
-  Serial.print(lightOn == true ? 'o' : 'd'); //o = ON / d= dark or off
+  Serial.print(lightOn  ? 'o' : 'd'); //o = ON / d= dark or off
   Serial.print(lightPower);
   Serial.print('-');
   Serial.print(currentDistance);
@@ -203,54 +205,60 @@ void processBtns() {
 
   btnTwo.read();
   if (btnTwo.wasPressed()) {
-    Serial.print('<');
-    Serial.print(CMD_BTN2_SHORT);
 
     if (!inMenu) { //if not in menu, send the light power information
       if (lightPower < 100) {
         lightPower = lightPower + 10;
         triggerDSPRefresh = true;
       }
+    } else {
+      Serial.print('<');
+      Serial.print(CMD_BTN2_SHORT);
+      Serial.print('>');
     }
-    Serial.print('>');
   }
 
   btnThree.read();
   if (btnThree.wasPressed()) {
-    Serial.print('<');
-    Serial.print(CMD_BTN3_SHORT);
 
     if (!inMenu) { //if not in menu, send the light power information
       if (lightPower > 0) {
         lightPower = lightPower - 10;
         triggerDSPRefresh = true;
       }
+    } else {
+      Serial.print('<');
+      Serial.print(CMD_BTN3_SHORT);
+      Serial.print('>');
     }
-    Serial.print('>');
+
   }
 }
 void processLdr() {
+  //  Serial.print(F("processLDR: ");
+  //  Serial.println(lightState);
 
   if (lightState == LIGHT_AUTO) {
-  boolean currLightStatus = lightOn;
-    
+    //  boolean currLightStatus = lightOn;
+
     ldrValue = analogRead(LDR);
-  
+
     //Serial.print("Analog reading = ");
     //Serial.print(ldrValue);     // the raw analog reading
 
     // We'll have a few threshholds, qualitatively determined
-    if (ldrValue < 70) {
+    if (ldrValue < 400) {
       lightOn = true;
     } else {
       lightOn = false;
     }
 
-    if (lightOn != currLightStatus){//if status not the same as the previous one, refresh display
-      triggerDSPRefresh = true;
-    }
-    
+  } else if (lightState == LIGHT_ON) {
+    lightOn = true;
+  } else if (lightState == LIGHT_OFF) {
+    lightOn = false;
   }
+  //  delay(500);
 }
 void turnOnOfflights() {
 
@@ -288,10 +296,13 @@ void handleSerialRead() {
         wheelCir = atoi(bufferCirc); //convert to int
         break;
       case CMD_LIGHT_DATA:
-        lightState = (int)receivedChars;
-        //    lightState = LIGHT_AUTO;
+        char bufferLight[3];
+        bufferLight[0] = receivedChars[1];
+        bufferLight[1] = '\0';
+        lightState = atoi(bufferLight);
         break;
       case CMD_DUMP_DATA:  //request to send display information
+        Serial.println("INDUMP");
         debugDump();
         break;
 
@@ -309,6 +320,7 @@ void recvWithStartEndMarkers() {
   while (Serial.available() > 0 && newData == false) {
 
     rc = Serial.read();
+
     if (recvInProgress == true) {
       if (rc != endMarker) {
         receivedChars[ndx] = rc;
@@ -347,6 +359,8 @@ void debugDump() {
   Serial.println(saveSent);
   Serial.print(F("started: "));
   Serial.println(started);
+  Serial.print(F("Light state: "));
+  Serial.println(lightState);
 
   Serial.print(F("receivedChars: "));
   Serial.println(receivedChars);

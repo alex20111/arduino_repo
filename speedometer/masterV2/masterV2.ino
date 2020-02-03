@@ -26,7 +26,7 @@
 
 U8G2_SSD1327_MIDAS_128X128_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/ U8g2_CS, /* dc=*/ U8g2_DC, /* reset=*/ U8g2_RESET);
 //EEPROM IDX
-uint8_t eepromIdx[] = {0, 4, 8, 9}; //saves in EEPROM. 0=totalOdo(4byte), 4=currOdo(4b),8=currWheelCirc(1b), 9=lightOption(1b), 11 --> to be next
+uint8_t eepromIdx[] = {0, 4, 8, 9, 11}; //saves in EEPROM. 0=totalOdo(4byte), 4=currOdo(4b),8=currWheelCirc(1b), 9=lightOption(1b), 11 timeStore, 15--> to be next
 
 // speedometer display
 long totalOdo = 0;   //Saved in EEPROM eepromIdx[0]
@@ -38,11 +38,14 @@ char odoDspFormatted [14]; //odo on oled.
 StopWatch chrono;
 boolean timerStarted = false;
 char timeBuffer[10];
+unsigned long prevTime = 0l;
+unsigned long storedTime = 0l;
+
 //speed
 char speedBuffer[5];
 //light
 char lightBuffer[6];
-char lightDisplay[4];
+char lightDisplay[5];
 boolean lightOn = false;
 
 //temperature//
@@ -135,6 +138,7 @@ void setup(void) {
 
   EEPROM.get(eepromIdx[0], totalOdo);
   EEPROM.get(eepromIdx[1], currOdo);
+  EEPROM.get(eepromIdx[4], storedTime);
 
   unsigned long waitMillis = millis();
   //wait from answer from uno and then send the saved data. 5 sec
@@ -154,11 +158,17 @@ void setup(void) {
   Serial.print(currOdo);
   Serial.print(F(" Total odo: ")); //debug
   Serial.println(totalOdo);
+  Serial.print(F(" Stored time: ")); //debug
+  Serial.println(storedTime);
   mainScrPrevMillis = millis();
 
   chrono.reset();
-  resetTimeBuffer();
-  //totalOdo = 0;
+  if (storedTime > 0) {
+    prevTime = storedTime;
+  } else {
+    resetTimeBuffer();
+  }
+
 }
 //MAIN LOOP//
 void loop(void) {
@@ -240,14 +250,16 @@ void timerCalculation() {
   }
 
   if (timerStarted) {
+    unsigned long timeInMillis = chrono.value() + prevTime;
     //calculate the time stince started.
     unsigned long over;
-    int runHours = int(chrono.value() / 3600000);
-    over = (chrono.value() % 3600000);
+    int runHours = int(timeInMillis / 3600000);
+    over = (timeInMillis % 3600000);
     int runMinutes = int(over / 60000);
     over = over % 60000;
     int runSeconds = int(over / 1000);
 
+    storedTime = ( (runHours * 3600) + (runMinutes * 60) + runSeconds) * 1000;
     sprintf(timeBuffer, "%02d:%02d:%02d", runHours, runMinutes, runSeconds); ///user a lot.. may if running out , replace
   }
 }
@@ -275,8 +287,8 @@ void requestToDisplay() {
 void handleDisplayVar() {
   // <  0         ,   1 ,2, 3  ,4,     5     ,6,      7    >
   // <cmdSendToDsp,speed,-,lightStatus,-,current odo>
-  //Serial.print(F("From UNO: "));
-  //Serial.println(receivedChars);
+  Serial.print(F("From UNO: "));
+  Serial.println(receivedChars);
   uint8_t idx   = 0;
   uint8_t charIdx = 0;
   for (uint8_t i = 1 ; i < strlen(receivedChars); i ++) {
@@ -309,14 +321,6 @@ void handleDisplayVar() {
 
   currOdoBuffer[charIdx] = '\0';
 
-  //  Serial.println(F("-----Results: -----"));
-  //  Serial.print(F("speedBuffer: "));
-  //  Serial.println(speedBuffer);
-  //  Serial.print(F("lightBuffer: "));
-  //  Serial.println(lightBuffer);
-  //  Serial.print(F("currOdoBuffer: "));
-  //  Serial.println(currOdoBuffer);
-
   prevOdo = (int)currOdo; //save previous current odo before incrementing
   //add current odo to total odo
   currOdo = atof(currOdoBuffer);
@@ -333,21 +337,24 @@ void handleDisplayVar() {
   } else {
     lightOn = false;
   }
+  //  Serial.print(F("strlen of lightBuffer: "));
+  //  Serial.println(strlen(lightBuffer));
   if (lightOn && strlen(lightBuffer) == 4) {  //o100  = 4 , o30 = 3, o0
+    //    Serial.println("YESSS");
     lightDisplay[0] = lightBuffer[1];
     lightDisplay[1] = lightBuffer[2];
     lightDisplay[2] = lightBuffer[3];
-    lightDisplay[3] = "%";
-    lightDisplay[4] = "\0";
+    lightDisplay[3] = '%';
+    lightDisplay[4] = '\0';
   } else   if (lightOn && strlen(lightBuffer) == 3) {  //o100  = 4 , o30 = 3, o0
     lightDisplay[0] = lightBuffer[1];
     lightDisplay[1] = lightBuffer[2];
-    lightDisplay[2] = "%";
-    lightDisplay[3] = "\0";
+    lightDisplay[2] = '%';
+    lightDisplay[3] = '\0';
   } else   if (lightOn && strlen(lightBuffer) == 2) {  //o100  = 4 , o30 = 3, o0
     lightDisplay[0] = lightBuffer[1];
-    lightDisplay[1] = "%";
-    lightDisplay[2] = "\0";
+    lightDisplay[1] = '%';
+    lightDisplay[2] = '\0';
   }
 }
 
@@ -380,18 +387,22 @@ void readTemperatureTherm() {
   temperature -= 273.15;                         // convert to C
 }
 void saveOdo() {
-  Serial.println(F("Received command to save ODO"));
+  Serial.println(F("Received command to save ODO/time"));
   Serial.println(totalOdo);
   Serial.print(F("Curr odo"));
   Serial.println(currOdo);
   EEPROM.put(eepromIdx[0], totalOdo);
   EEPROM.put(eepromIdx[1], currOdo);
+  EEPROM.put(eepromIdx[4], storedTime);
 }
 void resetCurrentOdo() {
   Serial.println(F("Received command to RESET ODO"));
   currOdo = 0;
   EEPROM.put(eepromIdx[1], currOdo);
   chrono.reset();
+  resetTimeBuffer();
+  storedTime = 0;
+  EEPROM.put(eepromIdx[4], storedTime);
 
 }
 void resetTimeBuffer() {
@@ -604,7 +615,9 @@ void handleSerialRead() {
         break;
       case CMD_BTN2_SHORT: //up
         Serial.println(F("BTN2 short"));
-        handleMenuBtn2();
+        if (inMenuMode) {
+          handleMenuBtn2();
+        }
         break;
       case CMD_BTN1_MENU:
         Serial.println(F("CMD_BTN1_MENU"));
@@ -612,7 +625,9 @@ void handleSerialRead() {
         break;
       case CMD_BTN3_SHORT: //down
         Serial.println(F("CMD_BTN3_SHORT"));
-        handleBtn3();
+        if (inMenuMode) {
+          handleBtn3();
+        }
         break;
       case 'Z': //DEBUG
         requestToDisplay();

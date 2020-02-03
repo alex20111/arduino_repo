@@ -9,19 +9,22 @@ CODE: add enum to lib
 CODE/HW: add battery reading
 CODE/HW: add mosfet control to light.
 CODE   : pass current odo information to arduino if not reset on startup. Right now currentOdo start at 0 every reboot.
-CODE   : save timer into eeprom when turning off. when reset, reset timer in eeprom also
+
 CODE   : Shift text to left when batt is 100%. text is getting cutoff for battery
+CODE   : Do not save ODO when only half roation of the wheel.
 
 
 ---------------TEST--------------
 
-CODE   : Add code to master for printing light percent.  
-CODE: test new elapsed time in interrupt (10 millis).
-CODE: add code for light button when increasing or decreasing % in handleBTN for MASTER
-CODE/HW: test and install LDR 
-CODE: test save speed in 1 min.
+CODE   : save timer into eeprom when turning off. when reset, reset timer in eeprom also
 
 ------------TEST DONE--------------
+
+CODE: test new elapsed time in interrupt (10 millis).
+CODE: test save speed in 1 min.
+CODE   : Add code to master for printing light percent.  
+CODE: add code for light button when increasing or decreasing % in handleBTN for MASTER
+CODE/HW: test and install LDR 
 CODE   : ADD LDR menu to mega. Option to enable or disable auto lights.
 Upload code to uno to correct odo reset.
 Have timer start and stop when he speed is greater than 0
