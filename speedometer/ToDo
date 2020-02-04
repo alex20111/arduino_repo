@@ -1,21 +1,22 @@
 screen: 44mm(l)
- by 37mm by 10mm(h)
+by 37mm by 10mm(h)
 CODE: coding need to be done
 HW : hardware need to be done
 CODE: add enum to lib
 
-
 --------------TODO---------------
+HW     : Make Junction box - 3D print with TINKERCAD
+HW     : Make Rear LED light
+HW     : Make box for screen
 CODE/HW: add battery reading
-CODE/HW: add mosfet control to light.
-CODE   : pass current odo information to arduino if not reset on startup. Right now currentOdo start at 0 every reboot.
-
-CODE   : Shift text to left when batt is 100%. text is getting cutoff for battery
-CODE   : Do not save ODO when only half roation of the wheel.
-
+HW     : Solder PCB protection to battery.    
+CODE/HW: add mosfet control to light and TEST light with LED driver.
+CODE   : Do not save ODO when only half rotation of the wheel.
 
 ---------------TEST--------------
 
+CODE   : pass current odo information to arduino if not reset on startup. Right now currentOdo start at 0 every reboot.
+CODE   : Shift text to left when batt is 100%. text is getting cutoff for battery
 CODE   : save timer into eeprom when turning off. when reset, reset timer in eeprom also
 
 ------------TEST DONE--------------
