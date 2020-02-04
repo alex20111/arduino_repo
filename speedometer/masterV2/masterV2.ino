@@ -79,6 +79,7 @@ const char CMD_MENU_END     = '1'; // options: exit menu
 const char CMD_SAVE_ODO     = 'A'; // options: command from slave to save ODO
 const char CMD_WHEEL_DATA   = 'B'; // options: Send to slave on startup for wheel circ data
 const char CMD_LIGHT_DATA   = 'C'; // options: Send to slave on startup for light function
+const char CMD_WHEEL_REVOLUTION   = 'W'; // options: Send the number of wheel revolution if we have some data in the curr odo. To restart calculation at the right spot
 
 //menu options
 boolean inMenuMode = false;
@@ -114,8 +115,7 @@ void setup(void) {
 
   // batt.begin(5000, 1.68);
 
-
-  //
+  ////////////////////to INIT EEPROM, to remove after 1st flash /////////////////
   //just once, verity fi we have data for wheel circ and lignt auto
   //  if (EEPROM.read(eepromIdx[2]) == 255) {
   //    Serial.println(F("No wheel circ, adding 209"));
@@ -127,7 +127,11 @@ void setup(void) {
   //    uint8_t lgt = 0;
   //    EEPROM.put(eepromIdx[3], lgt);
   //  }
-  ////////////////////
+
+  storedTime = 0;
+  EEPROM.put( eepromIdx[4], storedTime);
+  /////////////////////////////////////////////////
+  
 
   pinMode(THERMISTORPIN, INPUT);
 
@@ -197,9 +201,13 @@ void displayMainScreen() {
     //u8g2.setFont(u8g2_font_synchronizer_nbp_tr);
 
     u8g2.drawXBMP( 110, 0, 16, 16, battery_bitmap);
-    u8g2.setCursor(111, 21);
-    u8g2.print(battBuffer);
-
+	if (strlen(battBuffer) == 4){
+		u8g2.setCursor(105, 21);
+	}else{
+		u8g2.setCursor(111, 21);		
+	}
+	u8g2.print(battBuffer);
+		
     if (lightOn) {
       u8g2.drawXBMP( 0, 0, 16, 16, light_bitmap);
       u8g2.setCursor(0, 21);
@@ -444,15 +452,20 @@ void sendSlaveStartingData() {
   Serial1.print(CMD_LIGHT_DATA);
   Serial1.print(lightOption);
   Serial1.print('>');
-  Serial1.flush();
+  
+  //send wheel revolution information if currOdo is > than 0
+  if (currOdo > 0){
+	int revolutionCount =  ( currOdo / ((float)currWheelCirc / 100.00) ) * 1000  ;
+	Serial1.print('<');
+	Serial1.print(CMD_WHEEL_REVOLUTION);
+	Serial1.print(revolutionCount);
+	Serial1.print('>')	
+  }    
+  Serial1.flush(); 
 }
 
 void handleBtn1Menus() {
 
-  //    Serial.print("viewingScreen: ");
-  //    Serial.println(viewingScreen);
-  //    Serial.print("MenuOption: ");
-  //    Serial.println(menuOption);
   if (viewingScreen == 0) {
     if (menuOption == 3) {  //exit menu
       inMenuMode = false;
