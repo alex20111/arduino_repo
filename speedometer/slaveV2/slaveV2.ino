@@ -48,6 +48,7 @@ const char CMD_MENU_END     = '1'; // options: exit menu - Signal from MEGA tell
 const char CMD_SAVE_ODO     = 'A'; // options: command from slave to save ODO  //DONE
 const char CMD_WHEEL_DATA   = 'B'; // options: Receive from master on startup for wheel circ data //DONe
 const char CMD_LIGHT_DATA   = 'C'; // options: Send to slave on startup for light function//DONE
+const char CMD_WHEEL_REVOLUTION   = 'W'; // options: Send the number of wheel revolution if we have some data in the curr odo. To restart calculation at the right spot
 
 const char CMD_DUMP_DATA    = 'z'; // options:Debugging function, dump data UNO only.
 
@@ -56,8 +57,6 @@ boolean saveSent = false;
 boolean resetOdoSent = false;
 boolean speedoStopped = false;
 boolean started = false;
-
-boolean triggerDSPRefresh = false; // triger a display refresh.
 
 //timers
 unsigned long countDown = 0;
@@ -87,7 +86,6 @@ void setup(void) {
 
 void loop(void) {
 
-
   processLdr(); //read LDR info
 
   turnOnOfflights();
@@ -96,16 +94,9 @@ void loop(void) {
 
   processBtns();
 
-  //  if (triggerDSPRefresh) {
-  //    sendInfoToDsp();
-  //    triggerDSPRefresh = false;
-  //  }
-
   recvWithStartEndMarkers() ;
 
   handleSerialRead();
-
-  //  Serial.println(ldrValue);
 }
 
 void speedInt() { //interrupt
@@ -209,7 +200,6 @@ void processBtns() {
     if (!inMenu) { //if not in menu, send the light power information
       if (lightPower < 100) {
         lightPower = lightPower + 10;
-        triggerDSPRefresh = true;
       }
     } else {
       Serial.print('<');
@@ -224,7 +214,6 @@ void processBtns() {
     if (!inMenu) { //if not in menu, send the light power information
       if (lightPower > 0) {
         lightPower = lightPower - 10;
-        triggerDSPRefresh = true;
       }
     } else {
       Serial.print('<');
@@ -301,6 +290,12 @@ void handleSerialRead() {
         bufferLight[1] = '\0';
         lightState = atoi(bufferLight);
         break;
+	  case CMD_WHEEL_REVOLUTION:
+		char bufferRev[3];
+        bufferRev[0] = receivedChars[1];
+        bufferRev[1] = '\0';
+		revolutionCount = atoi(bufferRev);
+		break;
       case CMD_DUMP_DATA:  //request to send display information
         Serial.println("INDUMP");
         debugDump();
@@ -361,9 +356,6 @@ void debugDump() {
   Serial.println(started);
   Serial.print(F("Light state: "));
   Serial.println(lightState);
-
   Serial.print(F("receivedChars: "));
   Serial.println(receivedChars);
-
-
 }
