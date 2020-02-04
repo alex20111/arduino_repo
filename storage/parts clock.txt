@@ -1,0 +1,16 @@
+raspberry pi		-smartipy - buyapi.ca
+mount screen		
+radio				-sparksfun, elmwoods    -BOX
+audio player(usb)	- buyapi                -BOX
+4 digit lcd			- got it
+speaker/amp		
+ldr					-elmwood https://elmwoodelectronics.ca/products/adafruit-veml7700-lux-sensor-i2c-light-sensor  - BOX
+90 degree usb		-make it
+usb c adapter		-buyapi
+power supply		buyapi
+antenna              - BOX
+6 pin connector		- https://elmwoodelectronics.ca/products/11475
+push button			- https://elmwoodelectronics.ca/products/8605
+red led				-https://elmwoodelectronics.ca/products/5mm-round-red-super-bright-led-light
+
+https://elmwoodelectronics.ca/products/power-distribution-bus-7-x-6mm-diameter-solid-brass
