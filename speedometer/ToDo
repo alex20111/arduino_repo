@@ -11,16 +11,21 @@ HW     : Make box for screen
 CODE/HW: add battery reading
 HW     : Solder PCB protection to battery.    
 CODE/HW: add mosfet control to light and TEST light with LED driver.
-CODE   : Do not save ODO when only half rotation of the wheel.
+CODE   : Do not save ODO when only half rotation of the wheel./ Maybe use vribration trigger to know when to restart
+CODE   : when getting revolution count from master convert the reight amount from the char array. ex if rev = 1, then only 1 char , if rev = 3435 then 4 char to atoi.
+CDOE   : when starting , id ODO has information, load it right away at startup
+CODE   : Find github code for temperature sensor.
+CODE   : Load timer if any at startup on screen
 
 ---------------TEST--------------
+
+
+
+------------TEST DONE--------------
 
 CODE   : pass current odo information to arduino if not reset on startup. Right now currentOdo start at 0 every reboot.
 CODE   : Shift text to left when batt is 100%. text is getting cutoff for battery
 CODE   : save timer into eeprom when turning off. when reset, reset timer in eeprom also
-
-------------TEST DONE--------------
-
 CODE: test new elapsed time in interrupt (10 millis).
 CODE: test save speed in 1 min.
 CODE   : Add code to master for printing light percent.  

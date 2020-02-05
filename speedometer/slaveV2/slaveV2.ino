@@ -290,12 +290,31 @@ void handleSerialRead() {
         bufferLight[1] = '\0';
         lightState = atoi(bufferLight);
         break;
-	  case CMD_WHEEL_REVOLUTION:
-		char bufferRev[3];
-        bufferRev[0] = receivedChars[1];
-        bufferRev[1] = '\0';
-		revolutionCount = atoi(bufferRev);
-		break;
+      case CMD_WHEEL_REVOLUTION:
+        char bufferRev[6];
+        if (strlen(receivedChars ) == 2) {  //    W2 = 2 revolution (size 2), W23 = size 3, w545 = size 4 etc...
+          bufferRev[0] = receivedChars[1];
+          bufferRev[1] = '\0';
+        } else if (strlen(receivedChars ) == 3) {
+          bufferRev[0] = receivedChars[1];
+          bufferRev[1] = receivedChars[2];
+          bufferRev[2] = '\0';
+        } else if (strlen(receivedChars  ) == 4) {
+          bufferRev[0] = receivedChars[1];
+          bufferRev[1] = receivedChars[2];
+          bufferRev[2] = receivedChars[3];
+          bufferRev[3] = '\0';
+        }
+        else if (strlen(receivedChars ) == 5) {
+          bufferRev[0] = receivedChars[1];
+          bufferRev[1] = receivedChars[2];
+          bufferRev[2] = receivedChars[3];
+          bufferRev[3] = receivedChars[4];
+          bufferRev[4] = '\0';
+        }
+
+        revolutionCount = atoi(bufferRev);
+        break;
       case CMD_DUMP_DATA:  //request to send display information
         Serial.println("INDUMP");
         debugDump();

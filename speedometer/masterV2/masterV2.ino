@@ -106,7 +106,7 @@ char menu_temp_storage[46];  ///add PROGMEM
 
 //BATTERY
 Battery batt = Battery(7400, 8400, BATTERY);   //TODO, use voltage divider to sample battery power
-char battBuffer[4] = "100%";
+char battBuffer[5] = {'1','0','0','%','\0'};
 
 void setup(void) {
   Serial.begin(9600); // to debug
@@ -127,9 +127,9 @@ void setup(void) {
   //    uint8_t lgt = 0;
   //    EEPROM.put(eepromIdx[3], lgt);
   //  }
-
-  storedTime = 0;
-  EEPROM.put( eepromIdx[4], storedTime);
+//
+//  storedTime = 0;
+//  EEPROM.put( eepromIdx[4], storedTime);
   /////////////////////////////////////////////////
   
 
@@ -201,13 +201,14 @@ void displayMainScreen() {
     //u8g2.setFont(u8g2_font_synchronizer_nbp_tr);
 
     u8g2.drawXBMP( 110, 0, 16, 16, battery_bitmap);
-	if (strlen(battBuffer) == 4){
-		u8g2.setCursor(105, 21);
-	}else{
-		u8g2.setCursor(111, 21);		
-	}
-	u8g2.print(battBuffer);
-		
+//    Serial.println(strlen(battBuffer));
+  if (strlen(battBuffer) == 4){
+    u8g2.setCursor(107, 21);
+  }else{
+    u8g2.setCursor(111, 21);    
+  }
+  u8g2.print(battBuffer);
+    
     if (lightOn) {
       u8g2.drawXBMP( 0, 0, 16, 16, light_bitmap);
       u8g2.setCursor(0, 21);
@@ -395,10 +396,12 @@ void readTemperatureTherm() {
   temperature -= 273.15;                         // convert to C
 }
 void saveOdo() {
-  Serial.println(F("Received command to save ODO/time"));
+  Serial.print(F("Received command to save ODO/time"));
   Serial.println(totalOdo);
   Serial.print(F("Curr odo"));
   Serial.println(currOdo);
+  Serial.print(F("Time: "));
+  Serial.println(storedTime);
   EEPROM.put(eepromIdx[0], totalOdo);
   EEPROM.put(eepromIdx[1], currOdo);
   EEPROM.put(eepromIdx[4], storedTime);
@@ -455,11 +458,11 @@ void sendSlaveStartingData() {
   
   //send wheel revolution information if currOdo is > than 0
   if (currOdo > 0){
-	int revolutionCount =  ( currOdo / ((float)currWheelCirc / 100.00) ) * 1000  ;
-	Serial1.print('<');
-	Serial1.print(CMD_WHEEL_REVOLUTION);
-	Serial1.print(revolutionCount);
-	Serial1.print('>')	
+  int revolutionCount =  ( currOdo / ((float)currWheelCirc / 100.00) ) * 1000  ;
+  Serial1.print('<');
+  Serial1.print(CMD_WHEEL_REVOLUTION);
+  Serial1.print(revolutionCount);
+  Serial1.print('>');  
   }    
   Serial1.flush(); 
 }
