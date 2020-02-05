@@ -169,6 +169,7 @@ void setup(void) {
   chrono.reset();
   if (storedTime > 0) {
     prevTime = storedTime;
+	timerCalculation(true); //timer bypass to display time at startup
   } else {
     resetTimeBuffer();
   }
@@ -194,7 +195,7 @@ void displayMainScreen() {
     mainScrPrevMillis = millis();
 
     requestToDisplay();
-    timerCalculation();
+    timerCalculation(false);
 
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_5x8_tr);
@@ -244,8 +245,10 @@ void displayMainScreen() {
     u8g2.sendBuffer();
   }
 }
-void timerCalculation() {
+void timerCalculation(boolean bypass) {
 
+//bypass is used at startup to set the time at startup if any in storage.
+ if (!bypass){
   int currSpeed = atoi(speedBuffer);
 
   if (currSpeed > 0 && !timerStarted) {
@@ -257,8 +260,8 @@ void timerCalculation() {
     timerStarted = false;
     chrono.stop();
   }
-
-  if (timerStarted) {
+}
+  if (timerStarted || bypass) {
     unsigned long timeInMillis = chrono.value() + prevTime;
     //calculate the time stince started.
     unsigned long over;
@@ -412,7 +415,8 @@ void resetCurrentOdo() {
   EEPROM.put(eepromIdx[1], currOdo);
   chrono.reset();
   resetTimeBuffer();
-  storedTime = 0;
+  storedTime 	= 0;
+  prevTime 		= 0;
   EEPROM.put(eepromIdx[4], storedTime);
 
 }
