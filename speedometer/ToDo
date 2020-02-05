@@ -5,21 +5,23 @@ HW : hardware need to be done
 CODE: add enum to lib
 
 --------------TODO---------------
-HW     : Make Junction box - 3D print with TINKERCAD
+HW     : Make Junction box 
 HW     : Make Rear LED light
-HW     : Make box for screen
-CODE/HW: add battery reading
-HW     : Solder PCB protection to battery.    
-CODE/HW: add mosfet control to light and TEST light with LED driver.
-CODE   : Do not save ODO when only half rotation of the wheel./ Maybe use vribration trigger to know when to restart
-CODE   : when getting revolution count from master convert the reight amount from the char array. ex if rev = 1, then only 1 char , if rev = 3435 then 4 char to atoi.
-CDOE   : when starting , id ODO has information, load it right away at startup
-CODE   : Find github code for temperature sensor.
-CODE   : Load timer if any at startup on screen
+HW     : Make box for screen - 3D print with TINKERCAD 
+HW     : Solder PCB balance/protection to battery.
+		 add step up to charge the battery (verify)
+		 Verify that the battery protection discharge/charge both battery properly.
+CODE   : add battery reading
+CODE/HW: add mosfet control to light and TEST light with LED driver. TEST LIGHT with Battery and LED driver
+CODE   : Do not save ODO when only half rotation of the wheel./ Maybe use vibration trigger to know when to restart
+
+CODE/HW: Find github code for temperature sensor. https://github.com/adafruit/Adafruit_MCP9808_Library
 
 ---------------TEST--------------
 
-
+CODE   : Load timer if any at startup on screen - Master
+CODE   : when getting revolution count from master convert the right amount from the char array. ex if rev = 1, then only 1 char , if rev = 3435 then 4 char to atoi. Slavev2
+CODE   : when starting , id ODO has information, load it right away at startup (Display on screen at startup)  - Slavev2
 
 ------------TEST DONE--------------
 
