@@ -6,8 +6,9 @@
 #define BTN_1        4
 #define BTN_2        5
 #define BTN_3        6
-#define LIGHT_MOSFET 7
+#define LIGHT_PWM    9
 #define LDR A0     // V ------ LDR -- PIN(A0) --- /\/\/\ ---- GR  
+#define LIGHT_MOSFET 7
 
 // speedometer variables
 boolean inMetric = true;
@@ -26,9 +27,12 @@ boolean newData = false;
 
 //light//
 uint8_t lightPower = 50;  //0 to 100
+uint8_t prevLightPower = 50;
 int ldrValue = 0;
 boolean lightOn = false;
 LightState lightState = LIGHT_AUTO;
+boolean lightOffTriggered = true; //to tell the system that we already turned oof the light for real
+boolean lightOnTriggered = false; 
 
 //button debounce
 //Button btnOne(BTN_1); // Instantiate a Bounce object
@@ -60,6 +64,7 @@ boolean started = false;
 
 //timers
 unsigned long countDown = 0;
+unsigned long lightStatSave = 0;
 
 void setup(void) {
 
@@ -67,14 +72,17 @@ void setup(void) {
   attachInterrupt(digitalPinToInterrupt(HALL_SWITCH), speedInt, FALLING );
 
   pinMode(HALL_SWITCH, INPUT);
-  pinMode(LIGHT_MOSFET, OUTPUT);
+  pinMode(LIGHT_PWM, OUTPUT);
+  //  pinMode(LIGHT_MOSFET, OUTPUT);
+  analogWrite(LIGHT_PWM, 0);
+
   pinMode(LDR, INPUT);
 
   btnOne.begin();
   btnTwo.begin();
   btnThree.begin();
 
-  delay(200);
+  delay(1000);
 
   //send ready!
   Serial.print('<');
@@ -82,6 +90,9 @@ void setup(void) {
   Serial.print('>');
 
   speedoStopped = true;
+
+
+
 }
 
 void loop(void) {
@@ -97,6 +108,13 @@ void loop(void) {
   recvWithStartEndMarkers() ;
 
   handleSerialRead();
+
+  //save light power status after 30 seconds if it change.
+  if (lightPower != prevLightPower && (millis() - lightStatSave) > 10000) { //30 sec
+//    Serial.println("SAVE"); //TODODODOD
+    prevLightPower = lightPower;
+    
+  }
 }
 
 void speedInt() { //interrupt
@@ -199,7 +217,10 @@ void processBtns() {
 
     if (!inMenu) { //if not in menu, send the light power information
       if (lightPower < 100) {
+        prevLightPower = lightPower;
         lightPower = lightPower + 10;
+        handleLightPWM();
+        lightStatSave = millis(); //to save in EEPROM
       }
     } else {
       Serial.print('<');
@@ -213,7 +234,10 @@ void processBtns() {
 
     if (!inMenu) { //if not in menu, send the light power information
       if (lightPower > 0) {
+        prevLightPower = lightPower;
         lightPower = lightPower - 10;
+        handleLightPWM();
+        lightStatSave = millis();//to save in EEPROM
       }
     } else {
       Serial.print('<');
@@ -251,25 +275,61 @@ void processLdr() {
 }
 void turnOnOfflights() {
 
-  int mosfetStatus = digitalRead(LIGHT_MOSFET);
+  //  int mosfetStatus = digitalRead(LIGHT_PWM);
+  //
+  //  if (lightState == LIGHT_AUTO) {
+  //    if (lightOn && mosfetStatus == LOW) {
+  //      digitalWrite(LIGHT_MOSFET, HIGH);
+  //    } else if (!lightOn && mosfetStatus == HIGH) {
+  //      digitalWrite(LIGHT_MOSFET, LOW);
+  //    }
+  //  } else if (lightState == LIGHT_ON && mosfetStatus == LOW) {
+  //    digitalWrite(LIGHT_MOSFET, HIGH);
+  //  } else if (lightState == LIGHT_OFF && mosfetStatus == HIGH) {
+  //    digitalWrite(LIGHT_MOSFET, LOW);
+  //  }
 
-  if (lightState == LIGHT_AUTO) {
-    if (lightOn && mosfetStatus == LOW) {
-      digitalWrite(LIGHT_MOSFET, HIGH);
-    } else if (!lightOn && mosfetStatus == HIGH) {
-      digitalWrite(LIGHT_MOSFET, LOW);
+
+  if (lightState == LIGHT_AUTO ) {
+    if (lightOn && !lightOnTriggered) {
+//      Serial.println(F("light ON auto handle"));
+      lightOffTriggered = false;
+      lightOnTriggered = true;
+      handleLightPWM();
+    } else if (!lightOn && !lightOffTriggered) {
+//      Serial.println(F("light OFF auto handle"));
+      lightOffTriggered = true;
+      lightOnTriggered = false;
+      analogWrite(LIGHT_PWM, 0);
     }
-  } else if (lightState == LIGHT_ON && mosfetStatus == LOW) {
-    digitalWrite(LIGHT_MOSFET, HIGH);
-  } else if (lightState == LIGHT_OFF && mosfetStatus == HIGH) {
-    digitalWrite(LIGHT_MOSFET, LOW);
+  } else if (lightState == LIGHT_ON && !lightOnTriggered ) {
+//    Serial.println(F("light ON "));
+    lightOffTriggered = false;
+    lightOnTriggered = true;
+    handleLightPWM();
+  } else if (lightState == LIGHT_OFF && !lightOffTriggered) {
+//    Serial.println(F("light OFF"));
+    lightOffTriggered = true;
+    lightOnTriggered = false;
+    analogWrite(LIGHT_PWM, 0);
   }
+
+}
+void handleLightPWM() {
+  int pwnLevel = (lightPower / 10) * 25;
+
+  if (lightPower == 100) {
+    pwnLevel = 255;
+  }
+
+  analogWrite(LIGHT_PWM, pwnLevel);
 
 }
 void handleSerialRead() {
   if (newData == true) {
     newData = false;
 
+    //Serial.println(receivedChars);
     switch (receivedChars[0]) {
       case CMD_SEND_TO_DSP:  //request to send display information
         sendInfoToDsp();
@@ -292,17 +352,12 @@ void handleSerialRead() {
         break;
       case CMD_WHEEL_REVOLUTION:
         char bufferRev[7];
-		
-		uint8_t len = strlen(receivedChars ) + 1; //the +1 is to include the \0 char.
-		
-		for(uint8_t i = 1; i < len ;i++){	
-			bufferRev[i-1] = receivedChars[i];			
-		}		
 
+        for (uint8_t i = 1; i < strlen(receivedChars) + 1 ; i++) { //the +1 is to include the \0 char.
+          bufferRev[i - 1] = receivedChars[i];
+        }
         revolutionCount = atoi(bufferRev);
-		
-		currentDistance = revolutionCount * ((float)wheelCir / 100.00) / 1000.00; 
-		
+        currentDistance = (revolutionCount * ((float)wheelCir / 100.00) / 1000.00 );
         break;
       case CMD_DUMP_DATA:  //request to send display information
         Serial.println("INDUMP");

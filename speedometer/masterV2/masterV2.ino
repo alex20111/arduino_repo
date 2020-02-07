@@ -4,6 +4,8 @@
 #include <EEPROM.h>
 #include "bitmap.h"
 #include "OdoEnums.h"
+#include <Wire.h>
+#include "Adafruit_MCP9808.h"
 
 #include <Battery.h> //https://github.com/rlogiacco/BatterySense#double-cell-li-ion-2s-on-5v-mcu
 
@@ -49,13 +51,16 @@ char lightDisplay[5];
 boolean lightOn = false;
 
 //temperature//
-// which analog pin to connect
-#define THERMISTORNOMINAL 11000 // resistance at 25 degrees C
-#define TEMPERATURENOMINAL 25 // temp. for nominal resistance (almost always 25 C)
-#define NUMSAMPLES 5 // how many samples to take and average, more takes longer but is more 'smooth'
-#define BCOEFFICIENT 3950 // The beta coefficient of the thermistor (usually 3000-4000)
-#define SERIESRESISTOR 9970 // the value of the 'other' resistor
-int samples[NUMSAMPLES];
+// Create the MCP9808 temperature sensor object
+Adafruit_MCP9808 tempsensor = Adafruit_MCP9808();
+
+//// which analog pin to connect
+//#define THERMISTORNOMINAL 11000 // resistance at 25 degrees C
+//#define TEMPERATURENOMINAL 25 // temp. for nominal resistance (almost always 25 C)
+//#define NUMSAMPLES 5 // how many samples to take and average, more takes longer but is more 'smooth'
+//#define BCOEFFICIENT 3950 // The beta coefficient of the thermistor (usually 3000-4000)
+//#define SERIESRESISTOR 9970 // the value of the 'other' resistor
+//int samples[NUMSAMPLES];
 float temperature;
 
 //delays
@@ -133,7 +138,7 @@ void setup(void) {
   /////////////////////////////////////////////////
   
 
-  pinMode(THERMISTORPIN, INPUT);
+//  pinMode(THERMISTORPIN, INPUT);
 
   u8g2.begin();
   u8g2.setContrast(255);
@@ -155,6 +160,11 @@ void setup(void) {
     problemConnectingScreen();
     while (true) {} //do not start
   }
+if (!tempsensor.begin(0x18)) {
+  temperature = -99.99;
+    
+  }
+  tempsensor.setResolution(1);
   //send  saved info
   sendSlaveStartingData();
 
@@ -169,7 +179,7 @@ void setup(void) {
   chrono.reset();
   if (storedTime > 0) {
     prevTime = storedTime;
-	timerCalculation(true); //timer bypass to display time at startup
+  timerCalculation(true); //timer bypass to display time at startup
   } else {
     resetTimeBuffer();
   }
@@ -371,32 +381,38 @@ void handleDisplayVar() {
 }
 
 void readTemperatureTherm() {
-  uint8_t i;
-  float average;
-  // take N samples in a row, with a slight delay
-  for (i = 0; i < NUMSAMPLES; i++) {
-    samples[i] = analogRead(THERMISTORPIN);
-    delay(5);
-  }
+  tempsensor.wake();   
 
-  // average all the samples out
-  average = 0;
-  for (i = 0; i < NUMSAMPLES; i++) {
-    average += samples[i];
-  }
+  temperature = tempsensor.readTempC();
 
-  average /= NUMSAMPLES;
-
-  // convert the value to resistance
-  average = 1023 / average - 1;
-  average = SERIESRESISTOR / average;
-
-  temperature = average / THERMISTORNOMINAL;     // (R/Ro)
-  temperature = log(temperature);                  // ln(R/Ro)
-  temperature /= BCOEFFICIENT;                   // 1/B * ln(R/Ro)
-  temperature += 1.0 / (TEMPERATURENOMINAL + 273.15); // + (1/To)
-  temperature = 1.0 / temperature;                 // Invert
-  temperature -= 273.15;                         // convert to C
+  tempsensor.shutdown_wake(1); 
+  
+//  uint8_t i;
+//  float average;
+//  // take N samples in a row, with a slight delay
+//  for (i = 0; i < NUMSAMPLES; i++) {
+//    samples[i] = analogRead(THERMISTORPIN);
+//    delay(5);
+//  }
+//
+//  // average all the samples out
+//  average = 0;
+//  for (i = 0; i < NUMSAMPLES; i++) {
+//    average += samples[i];
+//  }
+//
+//  average /= NUMSAMPLES;
+//
+//  // convert the value to resistance
+//  average = 1023 / average - 1;
+//  average = SERIESRESISTOR / average;
+//
+//  temperature = average / THERMISTORNOMINAL;     // (R/Ro)
+//  temperature = log(temperature);                  // ln(R/Ro)
+//  temperature /= BCOEFFICIENT;                   // 1/B * ln(R/Ro)
+//  temperature += 1.0 / (TEMPERATURENOMINAL + 273.15); // + (1/To)
+//  temperature = 1.0 / temperature;                 // Invert
+//  temperature -= 273.15;                         // convert to C
 }
 void saveOdo() {
   Serial.print(F("Received command to save ODO/time"));
@@ -415,8 +431,8 @@ void resetCurrentOdo() {
   EEPROM.put(eepromIdx[1], currOdo);
   chrono.reset();
   resetTimeBuffer();
-  storedTime 	= 0;
-  prevTime 		= 0;
+  storedTime  = 0;
+  prevTime    = 0;
   EEPROM.put(eepromIdx[4], storedTime);
 
 }
