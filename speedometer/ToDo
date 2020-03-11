@@ -17,6 +17,7 @@ HW     : Solder PCB balance/protection to battery.  		DONE
 CODE   : add battery reading
 CODE   : Do not save ODO when only half rotation of the wheel./ Maybe use vibration trigger to know when to restart
 CODE   : Save light power status in EEPROM to return to saved value when turning back on. (SLAVE)
+CODE   : SLAVE, LDR - add a delay when swithing from dark to light and light to dark. 
 
 ---------------TEST--------------
 
