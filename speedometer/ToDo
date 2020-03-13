@@ -17,12 +17,12 @@ HW     : Solder PCB balance/protection to battery.  		DONE
 CODE   : add battery reading
 CODE   : Do not save ODO when only half rotation of the wheel./ Maybe use vibration trigger to know when to restart
 CODE   : Save light power status in EEPROM to return to saved value when turning back on. (SLAVE)
-CODE   : SLAVE, LDR - add a delay when swithing from dark to light and light to dark. 
 
 ---------------TEST--------------
 
 
 ------------TEST DONE--------------
+CODE   : SLAVE, LDR - add a delay when swithing from dark to light and light to dark. 
 CODE/HW: add mosfet control to light and TEST light with LED driver. TEST LIGHT with Battery and LED driver
 CODE/HW: Find github code for temperature sensor. https://github.com/adafruit/Adafruit_MCP9808_Library
 CODE   : when getting revolution count from master convert the right amount from the char array. ex if rev = 1, then only 1 char , if rev = 3435 then 4 char to atoi. Slavev2
