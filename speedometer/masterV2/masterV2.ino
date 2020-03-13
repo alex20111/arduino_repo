@@ -7,7 +7,7 @@
 #include <Wire.h>
 #include "Adafruit_MCP9808.h"
 
-#include <Battery.h> //https://github.com/rlogiacco/BatterySense#double-cell-li-ion-2s-on-5v-mcu
+//#include <Battery.h> //https://github.com/rlogiacco/BatterySense#double-cell-li-ion-2s-on-5v-mcu
 
 //ENUM LINKS: https://forum.arduino.cc/index.php?topic=88087.0
 
@@ -21,7 +21,7 @@
 
 //PINS
 #define THERMISTORPIN A1
-#define BATTERY A2
+//#define BATTERY A0
 #define U8g2_CS 10
 #define U8g2_DC 9
 #define U8g2_RESET 8
@@ -53,14 +53,6 @@ boolean lightOn = false;
 //temperature//
 // Create the MCP9808 temperature sensor object
 Adafruit_MCP9808 tempsensor = Adafruit_MCP9808();
-
-//// which analog pin to connect
-//#define THERMISTORNOMINAL 11000 // resistance at 25 degrees C
-//#define TEMPERATURENOMINAL 25 // temp. for nominal resistance (almost always 25 C)
-//#define NUMSAMPLES 5 // how many samples to take and average, more takes longer but is more 'smooth'
-//#define BCOEFFICIENT 3950 // The beta coefficient of the thermistor (usually 3000-4000)
-//#define SERIESRESISTOR 9970 // the value of the 'other' resistor
-//int samples[NUMSAMPLES];
 float temperature;
 
 //delays
@@ -110,15 +102,17 @@ const char *menu_light_txt = //add PROGMEM
 char menu_temp_storage[46];  ///add PROGMEM
 
 //BATTERY
-Battery batt = Battery(7400, 8400, BATTERY);   //TODO, use voltage divider to sample battery power
-char battBuffer[5] = {'1','0','0','%','\0'};
+//Battery batt = Battery(7000, 8400, A0);   //TODO, use voltage divider to sample battery power
+//unsigned long prevBattLevelReading = 0l;
+//uint8_t batteryLevel = 0;
+//char battBuffer[5] = {'1','0','0','%','\0'};
 
 void setup(void) {
   Serial.begin(9600); // to debug
   Serial1.begin(115200); //communication between mcu  250000bps
   Serial.print(EEPROM.get(eepromIdx[2], currWheelCirc));
 
-  // batt.begin(5000, 1.68);
+//   batt.begin(5000, 1.68);
 
   ////////////////////to INIT EEPROM, to remove after 1st flash /////////////////
   //just once, verity fi we have data for wheel circ and lignt auto
@@ -188,6 +182,8 @@ if (!tempsensor.begin(0x18)) {
 //MAIN LOOP//
 void loop(void) {
 
+//  readBatteryLevel();
+  
   readTemperatureTherm();
 
   recvWithStartEndMarkers();
@@ -203,6 +199,7 @@ void displayMainScreen() {
 
   if (millis() - mainScrPrevMillis > 500 && !inMenuMode) {
     mainScrPrevMillis = millis();
+   
 
     requestToDisplay();
     timerCalculation(false);
@@ -213,12 +210,12 @@ void displayMainScreen() {
 
     u8g2.drawXBMP( 110, 0, 16, 16, battery_bitmap);
 //    Serial.println(strlen(battBuffer));
-  if (strlen(battBuffer) == 4){
-    u8g2.setCursor(107, 21);
-  }else{
+//  if (strlen(battBuffer) == 4){
+//    u8g2.setCursor(107, 21);
+//  }else{
     u8g2.setCursor(111, 21);    
-  }
-  u8g2.print(battBuffer);
+//  }
+  u8g2.print("100");
     
     if (lightOn) {
       u8g2.drawXBMP( 0, 0, 16, 16, light_bitmap);
@@ -359,8 +356,7 @@ void handleDisplayVar() {
   } else {
     lightOn = false;
   }
-  //  Serial.print(F("strlen of lightBuffer: "));
-  //  Serial.println(strlen(lightBuffer));
+
   if (lightOn && strlen(lightBuffer) == 4) {  //o100  = 4 , o30 = 3, o0
     //    Serial.println("YESSS");
     lightDisplay[0] = lightBuffer[1];
@@ -387,32 +383,6 @@ void readTemperatureTherm() {
 
   tempsensor.shutdown_wake(1); 
   
-//  uint8_t i;
-//  float average;
-//  // take N samples in a row, with a slight delay
-//  for (i = 0; i < NUMSAMPLES; i++) {
-//    samples[i] = analogRead(THERMISTORPIN);
-//    delay(5);
-//  }
-//
-//  // average all the samples out
-//  average = 0;
-//  for (i = 0; i < NUMSAMPLES; i++) {
-//    average += samples[i];
-//  }
-//
-//  average /= NUMSAMPLES;
-//
-//  // convert the value to resistance
-//  average = 1023 / average - 1;
-//  average = SERIESRESISTOR / average;
-//
-//  temperature = average / THERMISTORNOMINAL;     // (R/Ro)
-//  temperature = log(temperature);                  // ln(R/Ro)
-//  temperature /= BCOEFFICIENT;                   // 1/B * ln(R/Ro)
-//  temperature += 1.0 / (TEMPERATURENOMINAL + 273.15); // + (1/To)
-//  temperature = 1.0 / temperature;                 // Invert
-//  temperature -= 273.15;                         // convert to C
 }
 void saveOdo() {
   Serial.print(F("Received command to save ODO/time"));
@@ -604,7 +574,7 @@ void printMenuList() {
   //  Serial.print(F("menu option: "));
   //  Serial.println(menuOption);
   u8g2.setFont(u8g2_font_6x12_tr);
-  u8g2.userInterfaceSelectionListNB(
+  u8g2.userInterfaceSelectionListNB(    
     "Menu",
     menuOption,
     main_menu_list);
@@ -614,7 +584,7 @@ void menuWheelCirc() {
   //  Serial.println(F("In menuWheelCirc"));
   sprintf(menu_temp_storage, "%s\n%d", menu_wheel_size_txt, currWheelCirc);  //alex
   u8g2.setFont(u8g2_font_6x12_tr);
-  u8g2.userInterfaceSelectionListNB(
+  u8g2.userInterfaceSelectionListNB(  
     "Size in CM",
     3,
     menu_temp_storage);  //alex
@@ -623,7 +593,7 @@ void menuWheelCirc() {
 void menuLightStatus() {   //alex
 
   u8g2.setFont(u8g2_font_6x12_tr);
-  u8g2.userInterfaceSelectionListNB(
+  u8g2.userInterfaceSelectionListNB( 
     "Light Option",
     lightOption,
     menu_light_txt);

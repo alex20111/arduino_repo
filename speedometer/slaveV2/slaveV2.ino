@@ -1,6 +1,7 @@
 #include <JC_Button.h>
 #include <Arduino.h>
 #include "OdoEnums.h"
+#include <StopWatch.h>
 
 #define HALL_SWITCH  2
 #define BTN_1        4
@@ -32,7 +33,7 @@ int ldrValue = 0;
 boolean lightOn = false;
 LightState lightState = LIGHT_AUTO;
 boolean lightOffTriggered = true; //to tell the system that we already turned oof the light for real
-boolean lightOnTriggered = false; 
+boolean lightOnTriggered = false;
 
 //button debounce
 //Button btnOne(BTN_1); // Instantiate a Bounce object
@@ -66,6 +67,12 @@ boolean started = false;
 unsigned long countDown = 0;
 unsigned long lightStatSave = 0;
 
+//LDR Timers
+StopWatch ldrChrono;
+enum LdrState { LIGHT, DARK, NONE};
+LdrState state = NONE;
+boolean doNotSwitchLight = false;
+
 void setup(void) {
 
   Serial.begin(115200);
@@ -91,7 +98,7 @@ void setup(void) {
 
   speedoStopped = true;
 
-
+  ldrChrono.reset();
 
 }
 
@@ -111,9 +118,9 @@ void loop(void) {
 
   //save light power status after 30 seconds if it change.
   if (lightPower != prevLightPower && (millis() - lightStatSave) > 10000) { //30 sec
-//    Serial.println("SAVE"); //TODODODOD
+    //    Serial.println("SAVE"); //TODODODOD
     prevLightPower = lightPower;
-    
+
   }
 }
 
@@ -251,64 +258,90 @@ void processLdr() {
   //  Serial.print(F("processLDR: ");
   //  Serial.println(lightState);
 
+  //ldrChrono
+  //doNotSwitchLight
+
   if (lightState == LIGHT_AUTO) {
-    //  boolean currLightStatus = lightOn;
+    LdrState prev = state;
 
     ldrValue = analogRead(LDR);
 
-    //Serial.print("Analog reading = ");
-    //Serial.print(ldrValue);     // the raw analog reading
+//    Serial.print("Analog reading = ");
+//    Serial.println(ldrValue);     // the raw analog reading
 
     // We'll have a few threshholds, qualitatively determined
     if (ldrValue < 400) {
-      lightOn = true;
-    } else {
-      lightOn = false;
+      //      lightOn = true;
+      state = DARK;
+    } else if (ldrValue >= 400) {
+      //      lightOn = false;
+      state = LIGHT;
     }
+//
+//    Serial.print("State: ");
+//    Serial.print(state);
+//    Serial.print(" Prev: ");
+//    Serial.print(  prev);
+//    Serial.print("  Chrono: ");
+//    Serial.println(ldrChrono.value());
+
+    if (prev != state) {
+      if (ldrChrono.value() > 0) {
+        ldrChrono.reset();
+      }
+      ldrChrono.start();
+
+      doNotSwitchLight = true;
+    }
+
+//    Serial.print("Do not Switch: ");
+//    Serial.println(doNotSwitchLight);
+
+    if (doNotSwitchLight && ldrChrono.value() > 5000) {
+      doNotSwitchLight = false;
+      ldrChrono.stop();
+      ldrChrono.reset();
+      if (state == DARK) {
+        lightOn = true;
+//        Serial.print("Light on: ");
+//        Serial.println(ldrValue);
+      } else if (state == LIGHT) {
+        lightOn = false;
+//                Serial.print("Light off: ");
+//        Serial.println(ldrValue);
+      }
+    }
+
 
   } else if (lightState == LIGHT_ON) {
     lightOn = true;
   } else if (lightState == LIGHT_OFF) {
     lightOn = false;
   }
-  //  delay(500);
+    delay(500);
 }
 void turnOnOfflights() {
-
-  //  int mosfetStatus = digitalRead(LIGHT_PWM);
-  //
-  //  if (lightState == LIGHT_AUTO) {
-  //    if (lightOn && mosfetStatus == LOW) {
-  //      digitalWrite(LIGHT_MOSFET, HIGH);
-  //    } else if (!lightOn && mosfetStatus == HIGH) {
-  //      digitalWrite(LIGHT_MOSFET, LOW);
-  //    }
-  //  } else if (lightState == LIGHT_ON && mosfetStatus == LOW) {
-  //    digitalWrite(LIGHT_MOSFET, HIGH);
-  //  } else if (lightState == LIGHT_OFF && mosfetStatus == HIGH) {
-  //    digitalWrite(LIGHT_MOSFET, LOW);
-  //  }
 
 
   if (lightState == LIGHT_AUTO ) {
     if (lightOn && !lightOnTriggered) {
-//      Serial.println(F("light ON auto handle"));
+      //      Serial.println(F("light ON auto handle"));
       lightOffTriggered = false;
       lightOnTriggered = true;
       handleLightPWM();
     } else if (!lightOn && !lightOffTriggered) {
-//      Serial.println(F("light OFF auto handle"));
+      //      Serial.println(F("light OFF auto handle"));
       lightOffTriggered = true;
       lightOnTriggered = false;
       analogWrite(LIGHT_PWM, 0);
     }
   } else if (lightState == LIGHT_ON && !lightOnTriggered ) {
-//    Serial.println(F("light ON "));
+    //    Serial.println(F("light ON "));
     lightOffTriggered = false;
     lightOnTriggered = true;
     handleLightPWM();
   } else if (lightState == LIGHT_OFF && !lightOffTriggered) {
-//    Serial.println(F("light OFF"));
+    //    Serial.println(F("light OFF"));
     lightOffTriggered = true;
     lightOnTriggered = false;
     analogWrite(LIGHT_PWM, 0);
