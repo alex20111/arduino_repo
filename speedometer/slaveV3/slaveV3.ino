@@ -79,7 +79,7 @@ boolean doNotSwitchLight = false;
 //batt power
 Adafruit_INA260 ina260 = Adafruit_INA260();
 unsigned long prevBattLevelReading = 0l;
-uint8_t batteryPower = 20;
+uint8_t batteryPower = 25;
 
 void setup(void) {
 
@@ -100,8 +100,8 @@ void setup(void) {
   btnThree.begin();
 
   if (!ina260.begin()) {
-//    problemConnectingScreen(1);
-    while (1);
+    ////    problemConnectingScreen(1);
+    //    while (1);
   }
 
   EEPROM.get(0, lightPower);
@@ -370,26 +370,42 @@ void handleLightPWM() {
 }
 void readBatteryLevel() {
 
-  if (millis() - prevBattLevelReading > 10000 && !inMenu) {
+  if (millis() - prevBattLevelReading > 20000 && !inMenu) {
+
+    uint16_t voltage = (uint16_t)ina260.readBusVoltage();
+    uint16_t minVoltage = 6100;
+    uint16_t maxVoltage = 8400;
+
+    if (voltage <= minVoltage) {
+      batteryPower = 0;
+    } else if (voltage >= maxVoltage) {
+      batteryPower =  100;
+    } else {
+      batteryPower = linear(voltage, minVoltage, maxVoltage);
+    }
 
 
-float voltage = ina260.readBusVoltage();
-//    Serial.print(F("Current: "));
-//    Serial.print(ina260.readCurrent());
-//    Serial.print(F(" mA"));
-//
-//    Serial.print(F("  Bus Voltage: "));
-//    Serial.print(ina260.readBusVoltage());
-//    Serial.print(F(" mV"));
-//
-//    Serial.print(F("  Power: "));
-//    Serial.print(ina260.readPower());
-//    Serial.println(F(" mW"));
+
+    //    Serial.print(F("Current: "));
+    //    Serial.print(ina260.readCurrent());
+    //    Serial.print(F(" mA"));
+    //
+    //    Serial.print(F("  Bus Voltage: "));
+    //    Serial.print(ina260.readBusVoltage());
+    //    Serial.print(F(" mV"));
+    //
+    //    Serial.print(F("  Power: "));
+    //    Serial.print(ina260.readPower());
+    //    Serial.println(F(" mW"));
 
 
     prevBattLevelReading = millis();
   }
 }
+uint8_t linear(uint16_t voltage, uint16_t minVoltage, uint16_t maxVoltage) {
+  return (unsigned long)(voltage - minVoltage) * 100 / (maxVoltage - minVoltage);
+}
+
 void handleSerialRead() {
   if (newData == true) {
     newData = false;

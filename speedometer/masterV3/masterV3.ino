@@ -6,8 +6,6 @@
 #include "OdoEnums.h"
 #include <Wire.h>
 #include "Adafruit_MCP9808.h"
-//#include <Adafruit_INA260.h>
-
 //ENUM LINKS: https://forum.arduino.cc/index.php?topic=88087.0
 
 #ifdef U8X8_HAVE_HW_SPI
@@ -51,6 +49,7 @@ unsigned long ldrPrevReading = 0;
 // Create the MCP9808 temperature sensor object
 Adafruit_MCP9808 tempsensor = Adafruit_MCP9808();
 float temperature;
+unsigned long prevTempReading = 0;
 
 //delays
 unsigned long mainScrPrevMillis = 0;//
@@ -63,7 +62,7 @@ boolean slaveReady = false;
 
 //commands -  Ex: mega ask for Speed , send: <1>  received <145>.
 const char CMD_SLAVE_READY   = '2'; //when slave (uno) is ready , automatically sent. Send; n/a reply <2ok>
-const char CMD_LIGHT_STATUS = '4'; // light status automatically sent from uno. <4o10%> (ON) - <4n>(off) - <4b>(blink)
+//const char CMD_LIGHT_STATUS = '4'; // light status automatically sent from uno. <4o10%> (ON) - <4n>(off) - <4b>(blink)
 const char CMD_REQ_TO_DSP   = '5'; //request all the require info to normal display. (Temp, speed, light status) from uno
 const char CMD_BTN1_MENU = '6'; //  Options: menu, menu select. command from slave
 const char CMD_BTN2_SHORT  = '7'; // options: menu Up command from slave
@@ -101,9 +100,7 @@ const char *menu_light_txt = //add PROGMEM
 char menu_temp_storage[46];  ///add PROGMEM
 
 //BATTERY
-//Adafruit_INA260 ina260 = Adafruit_INA260();
-//unsigned long prevBattLevelReading = 0l;
-//uint8_t batteryLevel = 0;
+uint8_t batteryPercent = 0;
 char battBuffer[6];
 
 void setup(void) {
@@ -157,10 +154,6 @@ void setup(void) {
     problemConnectingScreen(0);
     while (true) {} //do not start
   }
-  //  if (!ina260.begin()) {
-  //    problemConnectingScreen(1);
-  //    while (1);
-  //  }
   if (!tempsensor.begin(0x18)) {
     temperature = -99.99;
     problemConnectingScreen(2);
@@ -191,8 +184,6 @@ void setup(void) {
 //MAIN LOOP//
 void loop(void) {
 
-  //  readBatteryLevel();
-
   readTemperatureTherm();
 
   recvWithStartEndMarkers();
@@ -202,8 +193,6 @@ void loop(void) {
   handleSerialRead();
 
   readLdr();
-
-  //  processBtns();
 
   displayMainScreen();
 }
@@ -218,24 +207,14 @@ void readLdr() {
     Serial1.print(ldr);
     Serial1.print('>');
 
-    //    Serial.print(F("Ldr VAlue: ")); //TODO
-    //    Serial.println(ldr);
-
     ldrPrevReading = millis();
   }
-  //save light power also if changed.
-  //  if (lightPower != prevLightPower && (millis() - lightStatSave) > 30000) { //30 sec
-  //    Serial.print(F("saving light power"));//Remove
-  //    EEPROM.put(eepromIdx[5], lightPower);
-  //    prevLightPower = lightPower;
-  //
-  //  }
+
 }
 void displayMainScreen() {
 
   if (millis() - mainScrPrevMillis > 500 && !inMenuMode) {
     mainScrPrevMillis = millis();
-
 
     requestToDisplay();
     timerCalculation(false);
@@ -244,9 +223,17 @@ void displayMainScreen() {
     u8g2.setFont(u8g2_font_5x8_tr);
     //u8g2.setFont(u8g2_font_synchronizer_nbp_tr);
 
-    u8g2.drawXBMP( 110, 0, 16, 16, battery_bitmap);
-    //    Serial.println(strlen(battBuffer));
-    if (strlen(battBuffer) == 4) {
+    if (batteryPercent > 75) {
+      u8g2.drawXBMP( 110, 0, 16, 16, battery_100);
+    } else if (batteryPercent <= 75 && batteryPercent > 50) {
+      u8g2.drawXBMP( 110, 0, 16, 16, battery_75);
+    } else if (batteryPercent <= 50 && batteryPercent > 25) {
+      u8g2.drawXBMP( 110, 0, 16, 16, battery_50);
+    } else {
+      u8g2.drawXBMP( 110, 0, 16, 16, battery_25);
+    }
+    //    if (strlen(battBuffer) == 4) {
+    if (batteryPercent == 100) {
       u8g2.setCursor(107, 21);
     } else {
       u8g2.setCursor(111, 21);
@@ -261,7 +248,6 @@ void displayMainScreen() {
 
     u8g2.setCursor(50, 10); //temperature
     u8g2.print(temperature); //temperature
-    //      u8g2.setFont/(u8g2_font_6x10_tr);
 
     u8g2.setCursor(25, 110);
     u8g2.print(F("Odo"));
@@ -381,6 +367,12 @@ void handleDisplayVar() {
       }
     }
   }
+
+  battBuffer[charIdx] = '\0';
+  //get the int value of battery
+  batteryPercent = atoi(battBuffer);
+
+  //when we have the int value, format it for display.
   battBuffer[charIdx] = '%';
   battBuffer[charIdx + 1] = '\0';
 
@@ -419,19 +411,18 @@ void handleDisplayVar() {
     lightDisplay[1] = '%';
     lightDisplay[2] = '\0';
   }
-
-  //    Serial.print(F("Batt buffer: "));
-  //    Serial.println(battBuffer);
 }
 
 void readTemperatureTherm() {
 
-  if (!inMenuMode) {
+  if (millis() - prevTempReading > 5000 && !inMenuMode) {
     tempsensor.wake();
 
     temperature = tempsensor.readTempC();
 
     tempsensor.shutdown_wake(1);
+
+    prevTempReading = millis();
   }
 }
 void saveOdo() {
@@ -514,12 +505,6 @@ void sendSlaveStartingData() {
     Serial1.print(revolutionCount);
     Serial1.print('>');
   }
-  //
-  //  Serial1.print('<');
-  //  Serial1.print(CMD_LIGHT_POWER);
-  //  Serial1.print(lightPower);
-  //  Serial1.print('>');
-
   Serial1.flush();
 }
 
@@ -572,11 +557,6 @@ void handleBtn1Menus() {
 }
 
 void handleMenuBtn2() {
-
-  //      Serial.print("viewingScreen: ");
-  //    Serial.println(viewingScreen);
-  //    Serial.print("lightOption: ");
-  //    Serial.println(lightOption);
 
   if (viewingScreen == 0) {
     if (menuOption == 3) {  //if on exit, go to light option
@@ -668,8 +648,6 @@ void menuLightStatus() {   //alex
 void handleSerialRead() {
 
   if (newData == true) {
-    //    Serial.print(F("new Data: "));
-    //    Serial.println(receivedChars);
 
     newData = false;
     switch (receivedChars[0]) {
