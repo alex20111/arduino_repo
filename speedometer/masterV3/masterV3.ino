@@ -457,6 +457,8 @@ void welcomeScreen() {
   u8g2.setCursor(5, 21);
   u8g2.print(F("Welcome!"));
   u8g2.setFont(u8g2_font_5x8_tr);
+u8g2.drawXBMP( 32, 32, 64, 64, bike_bitmap);
+  
   u8g2.setCursor(5, 110);
   u8g2.print(F("By: Alexandre Boudreault"));
   u8g2.sendBuffer();
