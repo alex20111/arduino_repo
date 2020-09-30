@@ -1,0 +1,9 @@
+Garage sensor LED indication:
+
+Green = Power on.. Boot normal
+white = Ethernet active and not disconnected.
+blue  = Connected to server. Will turn off after a few  minutes if no connecion is sent
+yellow = On = Garage door is Open  , OFF= garage door is Closed.
+red   =  error from server. See server logs
+
+ping every 1/2 hour

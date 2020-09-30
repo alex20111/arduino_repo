@@ -1,0 +1,7 @@
+Identifier for sensors. 
+Every sensors that use the HC-12 will have an identifier.
+
+Project name:
+Attiny85_HC12_LED -- used for the garage LED - ID: A1
+Attiny85_HC12_LED -- used for the Bla Bla LED - ID: A2
+
