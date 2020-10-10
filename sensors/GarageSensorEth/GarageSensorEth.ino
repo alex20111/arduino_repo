@@ -37,7 +37,7 @@ const uint8_t doorPin = 7;
 
 uint8_t doorStatus = 0;
 uint8_t currentState = 0; // current state of the door that was sent to the server
-boolean sendMessage = false;
+boolean sendMessage = true;
 
 const byte numChars = 8;
 boolean newData = false;
@@ -54,7 +54,6 @@ float temperatureCelcius = 0.0;
 unsigned long sensorDataSentTimer = 0;
 
 //Button
-
 Bounce doorSwitch = Bounce(); // Instantiate a Bounce object
 
 void setup() {
@@ -71,12 +70,8 @@ void setup() {
   pinMode(ledConnected, OUTPUT);
   pinMode(ledDoorStatus, OUTPUT);
   pinMode(ledRespNotOk, OUTPUT);
-  //  pinMode(doorPin, INPUT);
 
   delay(2000);
-  //  }
-
-  //  Serial.println(F("Ready!!!"));
 
   prevTimer = millis() + 1800000;
 
@@ -86,7 +81,7 @@ void setup() {
   doorSwitch.interval( 25 );
 
   // Start up the library
-  sensors.begin();
+  sensors.begin(); //dallas temperature
 }
 
 void loop() {
@@ -156,7 +151,7 @@ void sendToClient(urlEnum urlToGo) {
   }
 
   if (connectedToServer) {
-    //    Serial.println(F("Connected sending data"));
+
     if (urlToGo == PING) {
       client.println((__FlashStringHelper *)postUrlPing);
     } else if (urlToGo == GARAGE_STATUS) {
@@ -218,7 +213,6 @@ void readEthernetReply() {
     } else {
       digitalWrite(ledRespNotOk, HIGH);
     }
-    //    Serial.println(serialReceivedChars);
   }
 }
 
