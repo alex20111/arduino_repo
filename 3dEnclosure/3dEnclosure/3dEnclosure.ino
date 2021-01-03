@@ -1,6 +1,9 @@
 // First we include the libraries
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include "SparkFun_SGP30_Arduino_Library.h" // Click here to get the library: http://librarymanager/All#SparkFun_SGP30
+#include <Wire.h>
+
 /********************************************************************/
 // Data wire is plugged into pin 2 on the Arduino
 #define ONE_WIRE_BUS 4
@@ -10,109 +13,164 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
 
+SGP30 mySensor; //create an object of the SGP30 class
+SGP30ERR error;
 
 char cmd;
 //Varibles used for calculations
 int NbTopsFan;
 int Calc;
-
-//The pin location of the sensor
-int hallsensor = 2;
-
-typedef struct {
-
-  //Defines the structure for multiple fans and
-  //their dividers
-  char fantype;
-  unsigned int fandiv;
-} fanspec;
-
-//Definitions of the fans
-//This is the varible used to select the fan and it's divider,
-//set 1 for unipole hall effect sensor
-//and 2 for bipole hall effect sensor
-fanspec fanspace[3] = {{0, 1}, {1, 2}, {2, 8}};
-char fan = 1;
+boolean reading = true;
 
 //serial
 const byte numChars = 8;
 char receivedChars[numChars];
 boolean newData = false;
+const char startMarker = '<';
+const char endMarker = '>';
 
-//light pins
+//pins
 uint8_t lightPin = 12;
 uint8_t fanPin = 11;
+uint8_t hallsensor = 2;
+uint8_t smokeSensor = A3;
+uint8_t flame1Sensor = 3;
+uint8_t flame2Sensor = 6;
+uint8_t flame3Sensor = 5;
+
+//timers
+unsigned long prevReading = 0;
+unsigned long prevAirQualityReading = 0;
 
 void rpm ()
-//This is the function that the interupt calls
 {
   NbTopsFan++;
+
+  if (millis() - prevReading > 1000 && reading) {
+    prevReading = millis();
+    Calc = NbTopsFan * 60;
+    NbTopsFan = 0;
+  }
 }
 
 //This is the setup function where the serial port is initialised,
 //and the interrupt is attached
 void setup()
 {
-
+  Serial.begin(19200);
   pinMode(hallsensor, INPUT);
   pinMode(lightPin, OUTPUT);
+  pinMode(smokeSensor, INPUT);
+  pinMode(flame1Sensor, INPUT);
+  pinMode(flame2Sensor, INPUT);
+  pinMode(flame3Sensor, INPUT);
+  pinMode(fanPin, OUTPUT);
 
-  Serial.begin(9600);
+
   attachInterrupt(0, rpm, RISING);
 
   setPwmFrequency(fanPin, 1024);
-  pinMode(fanPin, OUTPUT);
-  analogWrite(fanPin, 255);
 
+  analogWrite(fanPin, 255);
 
   digitalWrite(lightPin, LOW);
 
   sensors.begin();
+
+  Wire.begin();
+  boolean spg30Init = true;
+  //Initialize sensor
+  if (mySensor.begin() == false) {
+    Serial.println("No SGP30 Detected.");
+    spg30Init = false;
+
+  }
+  if (spg30Init) {
+    //Initializes sensor for air quality readings
+    //measureAirQuality should be called in one second increments after a call to initAirQuality
+    mySensor.initAirQuality();
+  }
+
   Serial.println("Ready");
 }
 
 void loop ()
 //Set NbTops to 0 ready for calculations
 {
-
-  calculateRPM();
-
   recvWithStartEndMarkers();
 
   handleSerialRead();
 
+  if (millis() - prevAirQualityReading > 1000) {
+    prevAirQualityReading  = millis();
+    error = mySensor.measureAirQuality();
+  }
+
 }
 
 void fanSpeed(byte spd) {
+  if (spd == 255) {
+    reading = false;
+    Calc = 0;
+  } else {
+    reading = true;
+  }
+
   analogWrite(fanPin, spd);
 }
 
 void sendRpm() {
-  Calc = ((NbTopsFan * 60) / fanspace[fan].fandiv);
+  //  Calc = ((NbTopsFan * 60) / fanspace[fan].fandiv);
+  Serial.print(startMarker);
   Serial.print('r');
   Serial.print(Calc);
+  Serial.print(endMarker);
   Serial.flush();
+
 
 }
 
-void calculateRPM() {
-  //    Serial.println("Start");
-  NbTopsFan = 0;
+void getAirQuality() {
 
-  //Enables interrupts
-  sei();
-
-  //Wait 1 second
-  delay (1000);
-
-  //Disable interrupts
-  cli();
+  if (error == SUCCESS) {
+    Serial.print(startMarker);
+    Serial.print('a');
+    Serial.print(mySensor.CO2);
+    Serial.print("-");
+    Serial.print(mySensor.TVOC);
+    Serial.print(endMarker);
+    Serial.flush();
+  } else {
+    Serial.print(startMarker);
+    Serial.print('a');
+    Serial.print("err");
+    Serial.print(endMarker);
+    Serial.flush();
+  }
 }
 
 void fetchTemperature() {
   sensors.requestTemperatures(); // Send the command to get temperature readings
+  Serial.print(startMarker);
   Serial.print('t');
   Serial.print(sensors.getTempCByIndex(0));
+  Serial.print(endMarker);
+  Serial.flush();
+}
+
+void getAllSensors() {
+  sensors.requestTemperatures();
+
+  Serial.print(startMarker);
+  Serial.print('m');
+  Serial.print(Calc);
+  Serial.print("-");
+  Serial.print(sensors.getTempCByIndex(0));
+  Serial.print("-");
+  Serial.print(mySensor.CO2);
+  Serial.print("-");
+  Serial.print(mySensor.TVOC);
+  Serial.print(endMarker);
   Serial.flush();
 }
 
@@ -132,8 +190,6 @@ void handleSerialRead() {
         for (uint8_t i = 1; i < strlen(receivedChars) + 1 ; i++) { //the +1 is to include the \0 char.
           bufferSpeed[i - 1] = receivedChars[i];
         }
-//        Serial.print(bufferSpeed);
-        //        ldrValue = atoi(bufferLDR);
         fanSpeed(atoi(bufferSpeed));
         break;
       case 'l':  //request to send display information<s
@@ -141,7 +197,13 @@ void handleSerialRead() {
         break;
       case 't':
         fetchTemperature();
-      break;
+        break;
+      case 'a':
+        getAirQuality();
+        break;
+      case 'm':
+        getAllSensors();
+        break;
 
     }
   }
@@ -164,8 +226,7 @@ void handleLight() {
 void recvWithStartEndMarkers() {
   static boolean recvInProgress = false;
   static byte ndx = 0;
-  char startMarker = '<';
-  char endMarker = '>';
+
   char rc;
 
   while (Serial.available() > 0 && newData == false) {
