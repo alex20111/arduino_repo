@@ -12,15 +12,13 @@ OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature.
 DallasTemperature sensors(&oneWire);
 
-
 SGP30 mySensor; //create an object of the SGP30 class
 SGP30ERR error;
 
+#define DEBOUNCE 0 //0 is fine for most fans, crappy fans may require 10 or 20 to filter out noise
+#define FANSTUCK_THRESHOLD 500 //if no interrupts were received for 500ms, consider the fan as stuck and report 0 RPM
+
 char cmd;
-//Varibles used for calculations
-int NbTopsFan;
-int Calc;
-boolean reading = true;
 
 //serial
 const byte numChars = 8;
@@ -31,47 +29,58 @@ const char endMarker = '>';
 
 //pins
 uint8_t lightPin = 12;
-uint8_t fanPin = 11;
+uint8_t fanPin = 9;
 uint8_t hallsensor = 2;
 uint8_t smokeSensor = A3;
 uint8_t flame1Sensor = 3;
 uint8_t flame2Sensor = 6;
-uint8_t flame3Sensor = 5;
+uint8_t printerPower = 5;
+uint8_t fanMosfet = 11;
 
 //timers
 unsigned long prevReading = 0;
 unsigned long prevAirQualityReading = 0;
 
-void rpm ()
-{
-  NbTopsFan++;
+unsigned long volatile ts1 = 0, ts2 = 0;
 
-  if (millis() - prevReading > 1000 && reading) {
-    prevReading = millis();
-    Calc = NbTopsFan * 60;
-    NbTopsFan = 0;
+void tachISR() {
+  unsigned long m = millis();
+  if ((m - ts2) > DEBOUNCE) {
+    ts1 = ts2;
+    ts2 = m;
   }
+}
+//Calculates the RPM based on the timestamps of the last 2 interrupts. Can be called at any time.
+unsigned long calcRPM() {
+  if (millis() - ts2 < FANSTUCK_THRESHOLD && ts2 != 0) {
+    return (60000 / (ts2 - ts1)) / 2;
+  } else return 0;
 }
 
 //This is the setup function where the serial port is initialised,
 //and the interrupt is attached
 void setup()
 {
+
+  pinMode(printerPower, OUTPUT);
+  digitalWrite(printerPower, HIGH);
+  
   Serial.begin(19200);
+  pinMode(fanMosfet, OUTPUT);
   pinMode(hallsensor, INPUT);
   pinMode(lightPin, OUTPUT);
   pinMode(smokeSensor, INPUT);
   pinMode(flame1Sensor, INPUT);
   pinMode(flame2Sensor, INPUT);
-  pinMode(flame3Sensor, INPUT);
+
   pinMode(fanPin, OUTPUT);
 
 
-  attachInterrupt(0, rpm, RISING);
+  //  attachInterrupt(0, rpm, RISING);
+  attachInterrupt(digitalPinToInterrupt(hallsensor), tachISR, FALLING); //set tachISR to be triggered when the signal on the sense pin goes low
 
-  setPwmFrequency(fanPin, 1024);
-
-  analogWrite(fanPin, 255);
+  //  setPwmFrequency(fanPin, 1024);
+  setupTimer1();
 
   digitalWrite(lightPin, LOW);
 
@@ -90,8 +99,9 @@ void setup()
     //measureAirQuality should be called in one second increments after a call to initAirQuality
     mySensor.initAirQuality();
   }
-
-  Serial.println("Ready");
+  digitalWrite(fanMosfet, LOW);
+  setPWM1A(0);
+  Serial.println(F("Ready"));
 }
 
 void loop ()
@@ -108,26 +118,23 @@ void loop ()
 
 }
 
-void fanSpeed(byte spd) {
-  if (spd == 255) {
-    reading = false;
-    Calc = 0;
-  } else {
-    reading = true;
-  }
+void fanSpeed(float spd) {
 
-  analogWrite(fanPin, spd);
+  if (spd == 0) {
+    digitalWrite(fanMosfet, LOW);
+  } else {
+    digitalWrite(fanMosfet, HIGH);
+  }
+  setPWM1A(spd);
 }
 
 void sendRpm() {
-  //  Calc = ((NbTopsFan * 60) / fanspace[fan].fandiv);
+
   Serial.print(startMarker);
   Serial.print('r');
-  Serial.print(Calc);
+  Serial.print(calcRPM());
   Serial.print(endMarker);
   Serial.flush();
-
-
 }
 
 void getAirQuality() {
@@ -161,15 +168,26 @@ void fetchTemperature() {
 void getAllSensors() {
   sensors.requestTemperatures();
 
+  int mq2 = analogRead(smokeSensor);
+  uint8_t fire1 = digitalRead(flame1Sensor);
+  uint8_t fire2 = digitalRead(flame2Sensor);
+  //  uint8_t fire3 = digitalRead(flame3Sensor);
+
   Serial.print(startMarker);
   Serial.print('m');
-  Serial.print(Calc);
+  Serial.print(calcRPM());
   Serial.print("-");
   Serial.print(sensors.getTempCByIndex(0));
   Serial.print("-");
   Serial.print(mySensor.CO2);
   Serial.print("-");
   Serial.print(mySensor.TVOC);
+  Serial.print("-");
+  Serial.print(mq2);
+  Serial.print("-");
+  Serial.print(fire1);
+  Serial.print("-");
+  Serial.print(fire2);
   Serial.print(endMarker);
   Serial.flush();
 }
@@ -190,7 +208,7 @@ void handleSerialRead() {
         for (uint8_t i = 1; i < strlen(receivedChars) + 1 ; i++) { //the +1 is to include the \0 char.
           bufferSpeed[i - 1] = receivedChars[i];
         }
-        fanSpeed(atoi(bufferSpeed));
+        fanSpeed(atof(bufferSpeed));
         break;
       case 'l':  //request to send display information<s
         handleLight();
@@ -203,6 +221,11 @@ void handleSerialRead() {
         break;
       case 'm':
         getAllSensors();
+        break;
+
+      case 'p':
+      Serial.println("Handle power");
+        handlePrinterPower();
         break;
 
     }
@@ -223,6 +246,26 @@ void handleLight() {
     digitalWrite(lightPin, LOW);
   }
 }
+
+void handlePrinterPower() {
+
+  char bufferPower[3];
+
+  bufferPower[0] = receivedChars[1];
+  bufferPower[1] = '\0';
+
+  Serial.print("Power: ");
+  Serial.println(receivedChars[1]);
+
+  uint8_t printerPowerOn = atoi(bufferPower);
+
+  if (printerPowerOn) {
+    digitalWrite(printerPower, LOW);
+  } else {
+    digitalWrite(printerPower, HIGH);    
+  }
+}
+
 void recvWithStartEndMarkers() {
   static boolean recvInProgress = false;
   static byte ndx = 0;
@@ -252,33 +295,16 @@ void recvWithStartEndMarkers() {
     }
   }
 }
-void setPwmFrequency(int pin, int divisor) {
-  byte mode;
-  if (pin == 5 || pin == 6 || pin == 9 || pin == 10) {
-    switch (divisor) {
-      case 1: mode = 0x01; break;
-      case 8: mode = 0x02; break;
-      case 64: mode = 0x03; break;
-      case 256: mode = 0x04; break;
-      case 1024: mode = 0x05; break;
-      default: return;
-    }
-    if (pin == 5 || pin == 6) {
-      TCCR0B = TCCR0B & 0b11111000 | mode;
-    } else {
-      TCCR1B = TCCR1B & 0b11111000 | mode;
-    }
-  } else if (pin == 3 || pin == 11) {
-    switch (divisor) {
-      case 1: mode = 0x01; break;
-      case 8: mode = 0x02; break;
-      case 32: mode = 0x03; break;
-      case 64: mode = 0x04; break;
-      case 128: mode = 0x05; break;
-      case 256: mode = 0x06; break;
-      case 1024: mode = 0x07; break;
-      default: return;
-    }
-    TCCR2B = TCCR2B & 0b11111000 | mode;
-  }
+
+void setPWM1A(float f) {
+  f = f < 0 ? 0 : f > 1 ? 1 : f;
+  OCR1A = (uint16_t)(320 * f);
+}
+void setupTimer1() {
+  //Set PWM frequency to about 25khz on pins 9,10 (timer 1 mode 10, no prescale, count to 320)
+  TCCR1A = (1 << COM1A1) | (1 << COM1B1) | (1 << WGM11);
+  TCCR1B = (1 << CS10) | (1 << WGM13);
+  ICR1 = 320;
+  OCR1A = 0;
+  OCR1B = 0;
 }

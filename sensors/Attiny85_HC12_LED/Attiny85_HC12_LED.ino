@@ -26,7 +26,7 @@ void setup() {
 }
 
 void loop() {
-  // this is a ping pong example of recieve and transmit the data.
+
   recvWithStartEndMarkers();
   handleRecv();
 

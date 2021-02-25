@@ -2,6 +2,16 @@
 #include <UIPEthernet.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <utility\Enc28J60Network.h>
+
+
+#define NET_ENC28J60_EIR          0x1C
+#define NET_ENC28J60_ESTAT        0x1D
+#define NET_ENC28J60_ECON1        0x1F
+#define NET_ENC28J60_EIR_RXERIF   0x01
+#define NET_ENC28J60_ESTAT_BUFFER 0x40
+#define NET_ENC28J60_ECON1_RXEN   0x04
+#define NET_ENC28J60_CHECK_PERIOD 5000UL
 
 enum urlEnum {
   GARAGE_STATUS,
@@ -124,6 +134,8 @@ void loop() {
     if (millis() - sensorDataSentTimer > 300000) { // 5 min temperature sensor
       sensorDataSentTimer = millis();
       requestTemperature();
+      Ethernet.maintain();
+
     }
 
   } else {
@@ -230,4 +242,20 @@ void requestTemperature() {
   data += temperatureCelcius;
   data += "}";
   sendToClient(GARAGE_TEMP);
+}
+
+void eth_reset() {
+  pinMode(4, OUTPUT);
+  digitalWrite(4, LOW);
+  delay(100);
+  digitalWrite(4, HIGH);
+  pinMode(4, INPUT);
+
+  Ethernet.begin(mac, ip, myDns, gateway, subnet);
+  //  server.begin();
+  //  Serial.print(F("WEB server is at "));
+  //  Serial.println(Ethernet.localIP());
+  //
+  //  Serial.print(F("DNS server is at "));
+  //  Serial.println(Ethernet.dnsServerIP());
 }
