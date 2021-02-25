@@ -5,7 +5,7 @@
 #include <TM1637Display.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include <SimpleSleep.h>
+#include "LowPower.h"
 
 const uint8_t SEG_ERR[] = {
   SEG_A | SEG_D | SEG_E | SEG_F | SEG_G, // E
@@ -16,7 +16,6 @@ const uint8_t SEG_ERR[] = {
 
 char identifier[] = "A2"; //increment everytime a new one is created..
 
-SimpleSleep Sleep;
 // Module connection pins (Digital Pins)
 #define CLK 4
 #define DIO 5
@@ -24,6 +23,7 @@ SimpleSleep Sleep;
 const uint8_t BTN1_PIN = 6;              // connect a button switch from this pin to ground
 const uint8_t INTERRUPT_PIN = 2;
 const uint8_t INTERRUPT_PIN2 = 3;
+const uint8_t hc12SetPin = 8;
 
 TM1637Display display(CLK, DIO);
 OneWire oneWire(ONE_WIRE_BUS);
@@ -31,15 +31,20 @@ DallasTemperature sensors(&oneWire);
 
 Button btn1(BTN1_PIN);       // define the button
 
-boolean sleepActive = true;
 boolean displayTemp = false;
 unsigned long prevTempDisplay = 0;
+float temperatureF = 0.0;
 
-int time_interval = 1; // Sets the wakeup intervall in minutes
+// these values are taken from the HC-12 documentation v2 (+10ms for safety)
+const unsigned long hc12setHighTime = 90;
+const unsigned long hc12setLowTime = 50;
+const unsigned long hc12cmdTime = 100;
+
+time_t ALARM_INTERVAL(5 * 60);    // alarm interval in seconds
 
 void interruptHandler()
 {
-  detachInterrupt(0);
+
 }
 void bntInterrupt() {
   detachInterrupt(1);
@@ -52,6 +57,9 @@ void setup() {
 
   pinMode(INTERRUPT_PIN, INPUT_PULLUP);
   pinMode(INTERRUPT_PIN2, INPUT_PULLUP);
+  pinMode(hc12SetPin, OUTPUT);
+
+  digitalWrite(hc12SetPin, HIGH);
 
   attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
   //TM1637
@@ -63,35 +71,31 @@ void setup() {
     display.setSegments(SEG_ERR);
 
   btn1.begin();
+
   displayConfig();
-  
+
   initialiseClock();
   Serial.print('<');
   Serial.print(identifier);
   Serial.print(F("started"));
-  Serial.print(time_interval);
+  Serial.print(ALARM_INTERVAL);
   Serial.print('>');
+  Serial.flush();
+  sendTemperature();
+  delay(2000);
 }
 
 void loop() {
 
   if (!displayTemp) {
-    //    Serial.println("going to sleep");
-    //    Serial.flush();
+
     reInitAlarm();
     if (sensors.getDS18Count() != 0 ) {
-      sensors.requestTemperatures();
-      double temp = sensors.getTempFByIndex(0);
-
-      Serial.print('<');
-      Serial.print(identifier);
-      Serial.print(temp);
-      Serial.print('>');
-      Serial.flush();
       if (displayTemp) {
-        handleDisplayTemp(temp);
+        handleDisplayTemp();
         prevTempDisplay = millis();
       }
+      sendTemperature();
     }
   }
 
@@ -101,29 +105,27 @@ void loop() {
     display.showNumberDec(0);
     displayTemp = false;
   }
-
 }
 
-void handleButtons() {
 
-}
 void reInitAlarm() {
+  HC12Sleep();
+  
   attachInterrupt(0, interruptHandler, LOW);//attaching a interrupt to pin d2
   attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
-  if (sleepActive) {
-    Sleep.idleFor(15);
-    Sleep.deeply();
-  }
+  LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
+  detachInterrupt(0);
 
-  //  Serial.println("just woke up!");//next line of code executed after the interrupt
+  HC12Wake();
 
   time_t t = RTC.get();
-  //  Serial.println("WakeUp Time: " + String(hour(t)) + ":" + String(minute(t)) + ":" + String(second(t))); //Prints time stamp
+  time_t alarmTime = t + ALARM_INTERVAL;
   //Set New Alarm
-  RTC.setAlarm(ALM1_MATCH_MINUTES , 0, minute(t) + time_interval, 0, 0);
-  //RTC.setAlarm(ALM1_MATCH_SECONDS , second(t) + time_interval, 0, 0, 0);
+  //  RTC.setAlarm(ALM1_MATCH_MINUTES , 0, minute(t) + time_interval, 0, 0);
+  RTC.setAlarm(ALM1_MATCH_HOURS, second(alarmTime), minute(alarmTime), hour(alarmTime), 0);
   // clear the alarm flag
   RTC.alarm(ALARM_1);
+  //  printAlarm(t);
 
 }
 void initialiseClock() {
@@ -135,25 +137,21 @@ void initialiseClock() {
   RTC.alarmInterrupt(ALARM_1, false);
   RTC.alarmInterrupt(ALARM_2, false);
   RTC.squareWave(SQWAVE_NONE);
-  /*
-     Uncomment the block block to set the time on your RTC. Remember to comment it again
-     otherwise you will set the time at everytime you upload the sketch
-     /
-    /* Begin block
-    tmElements_t tm;
-    tm.Hour = 00;               // set the RTC to an arbitrary time
-    tm.Minute = 00;
-    tm.Second = 00;
-    tm.Day = 4;
-    tm.Month = 2;
-    tm.Year = 2018 - 1970;      // tmElements_t.Year is the offset from 1970
-    RTC.write(tm);              // set the RTC from the tm structure
-    Block end * */
-  //  Serial.println("init alarm");
-  time_t t; //create a temporary time variable so we can set the time and read the time from the RTC
-  t = RTC.get(); //Gets the current time of the RTC
-  RTC.setAlarm(ALM1_MATCH_MINUTES , 0, minute(t) + time_interval, 0, 0); // Setting alarm 1 to go off 5 minutes from now
-  //  RTC.setAlarm(ALM1_MATCH_SECONDS , second(t) + time_interval, 0, 0, 0);
+
+  tmElements_t tm;
+  tm.Hour = 00;               // set the RTC to an arbitrary time
+  tm.Minute = 00;
+  tm.Second = 00;
+  tm.Day = 4;
+  tm.Month = 2;
+  tm.Year = 2021 - 1970;      // tmElements_t.Year is the offset from 1970
+  time_t t = makeTime(tm);        // change the tm structure into time_t (seconds since epoch)
+  time_t alarmTime = t + ALARM_INTERVAL;    // calculate the alarm time
+
+  // set the current time
+  RTC.set(t);
+  //  RTC.setAlarm(ALM1_MATCH_MINUTES , 0, minute(t) + time_interval, 0, 0); // Setting alarm 1 to go off 5 minutes from now
+  RTC.setAlarm(ALM1_MATCH_HOURS, second(alarmTime), minute(alarmTime), hour(alarmTime), 0);
 
   // clear the alarm flag
   RTC.alarm(ALARM_1);
@@ -162,39 +160,117 @@ void initialiseClock() {
   // enable interrupt output for Alarm 1
   RTC.alarmInterrupt(ALARM_1, true);
 
-
-  t = RTC.get();
-  //  Serial.println("init Time: " + String(hour(t)) + ":" + String(minute(t)) + ":" + String(second(t))); //Prints time stamp
-  //  Serial.flush();
 }
 
-void handleDisplayTemp(double temp) {
+void handleDisplayTemp() {
 
   display.setBrightness(7, true);
-  display.showNumberDec((int)temp);
+  display.showNumberDec((int)temperatureF);
 }
 
 void displayConfig() {
   unsigned long currMillis = millis();
   display.setBrightness(7, true);
-  display.showNumberDec(time_interval);
+  uint8_t intv = 1;
+
+  display.showNumberDec(intv);
   currMillis = millis();
 
   while (true) {
     btn1.read();
     if (btn1.wasPressed()) {
-      time_interval++;
-      display.showNumberDec(time_interval);
+
+      if (intv < 250) {
+        intv++;
+      }
+      display.showNumberDec(intv);
       currMillis = millis();
     }
 
     if (millis() - currMillis > 5000) {
       break;
     }
+
   }
+  ALARM_INTERVAL = intv * 60;
+
   display.setBrightness(7, false);
   display.showNumberDec(0);
 }
+void sendTemperature() {
+  sensors.requestTemperatures();
+  temperatureF =     sensors.getTempFByIndex(0);
+  Serial.print('<');
+  Serial.print(identifier);
+  Serial.print(temperatureF);
+  Serial.print('>');
+  Serial.flush();
+
+  delay(2000);//wait for the HC12 to have time to transmit before shutting down.. 
+}
+// put HC-12 module into sleep mode
+void HC12Sleep() {
+  sendH12Cmd("AT+SLEEP");
+}
+
+void HC12Wake() {
+  digitalWrite(hc12SetPin, LOW);
+  delay(hc12setLowTime);
+  digitalWrite(hc12SetPin, HIGH);
+  // wait some extra time
+  delay(250);
+}
+void sendH12Cmd(const char cmd[]) {
+  digitalWrite(hc12SetPin, LOW);
+  delay(hc12setLowTime);
+
+  Serial.print(cmd);
+  Serial.flush();
+  delay(hc12cmdTime);
+
+  digitalWrite(hc12SetPin, HIGH);
+  delay(hc12setHighTime);
+  
+  awaitHC12Response();
+}
+void awaitHC12Response() {
+  uint8_t counter = 0;
+  boolean breakLoop = false;
+  //wait
+  while (counter < 10) { //wait for answer up to 1 second
+    while (Serial.available()  > 0 ) {
+      breakLoop = true;
+      char r = Serial.read();
+      if (r == 'O') {
+        //we found the letter O.
+        break;
+      }
+    }
+    delay(100);
+    if (breakLoop) {
+      break;
+    }
+    counter++;
+  }
+}
+
+
+//void printAlarm(time_t t) {
+//  Serial.print(F("year: "));
+//  Serial.print(year(t));
+//  Serial.print(F(" month: "));
+//  Serial.print(month(t));
+//  Serial.print(F(" day: "));
+//  Serial.print(day(t));
+//  Serial.print(F(" hour: "));
+//  Serial.print(hour(t));
+//  Serial.print(F(" minutes: "));
+//  Serial.print(minute(t));
+//  Serial.print(F(" seconds: "));
+//  Serial.print(second(t));
+//  Serial.print(F(" time T: "));
+//  Serial.println(t);
+//}
 
 
 //requirement
