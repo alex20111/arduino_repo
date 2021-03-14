@@ -33,7 +33,7 @@ uint8_t fanPin = 9;
 uint8_t hallsensor = 2;
 uint8_t smokeSensor = A3;
 uint8_t flame1Sensor = 3;
-uint8_t flame2Sensor = 6;
+uint8_t pirSensor = 6;
 uint8_t printerPower = 5;
 uint8_t fanMosfet = 11;
 
@@ -64,14 +64,14 @@ void setup()
 
   pinMode(printerPower, OUTPUT);
   digitalWrite(printerPower, HIGH);
-  
+
   Serial.begin(19200);
   pinMode(fanMosfet, OUTPUT);
   pinMode(hallsensor, INPUT);
   pinMode(lightPin, OUTPUT);
   pinMode(smokeSensor, INPUT);
   pinMode(flame1Sensor, INPUT);
-  pinMode(flame2Sensor, INPUT);
+  pinMode(pirSensor, INPUT);
 
   pinMode(fanPin, OUTPUT);
 
@@ -170,7 +170,7 @@ void getAllSensors() {
 
   int mq2 = analogRead(smokeSensor);
   uint8_t fire1 = digitalRead(flame1Sensor);
-  uint8_t fire2 = digitalRead(flame2Sensor);
+  uint8_t pir = digitalRead(pirSensor);
   //  uint8_t fire3 = digitalRead(flame3Sensor);
 
   Serial.print(startMarker);
@@ -187,7 +187,7 @@ void getAllSensors() {
   Serial.print("-");
   Serial.print(fire1);
   Serial.print("-");
-  Serial.print(fire2);
+  Serial.print(pir);
   Serial.print(endMarker);
   Serial.flush();
 }
@@ -224,7 +224,7 @@ void handleSerialRead() {
         break;
 
       case 'p':
-      Serial.println("Handle power");
+
         handlePrinterPower();
         break;
 
@@ -254,15 +254,12 @@ void handlePrinterPower() {
   bufferPower[0] = receivedChars[1];
   bufferPower[1] = '\0';
 
-  Serial.print("Power: ");
-  Serial.println(receivedChars[1]);
-
   uint8_t printerPowerOn = atoi(bufferPower);
 
   if (printerPowerOn) {
     digitalWrite(printerPower, LOW);
   } else {
-    digitalWrite(printerPower, HIGH);    
+    digitalWrite(printerPower, HIGH);
   }
 }
 

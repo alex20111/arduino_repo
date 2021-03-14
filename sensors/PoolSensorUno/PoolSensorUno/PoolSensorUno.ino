@@ -20,10 +20,12 @@ char identifier[] = "A2"; //increment everytime a new one is created..
 #define CLK 4
 #define DIO 5
 #define ONE_WIRE_BUS 7
-const uint8_t BTN1_PIN = 6;              // connect a button switch from this pin to ground
+const uint8_t BTN1_PIN = 3;              // connect a button switch from this pin to ground
 const uint8_t INTERRUPT_PIN = 2;
 const uint8_t INTERRUPT_PIN2 = 3;
 const uint8_t hc12SetPin = 8;
+const uint8_t batterySense = A0;
+const uint8_t displayPin = 9;
 
 TM1637Display display(CLK, DIO);
 OneWire oneWire(ONE_WIRE_BUS);
@@ -34,6 +36,8 @@ Button btn1(BTN1_PIN);       // define the button
 boolean displayTemp = false;
 unsigned long prevTempDisplay = 0;
 float temperatureF = 0.0;
+int batteryADCReading = 0;
+float batteryVoltage = 0.0;
 
 // these values are taken from the HC-12 documentation v2 (+10ms for safety)
 const unsigned long hc12setHighTime = 90;
@@ -58,6 +62,12 @@ void setup() {
   pinMode(INTERRUPT_PIN, INPUT_PULLUP);
   pinMode(INTERRUPT_PIN2, INPUT_PULLUP);
   pinMode(hc12SetPin, OUTPUT);
+  pinMode(batterySense, INPUT);
+  pinMode(displayPin, OUTPUT);
+
+  batteryADCReading = analogRead(batterySense);
+
+  digitalWrite(displayPin, HIGH);
 
   digitalWrite(hc12SetPin, HIGH);
 
@@ -105,14 +115,19 @@ void loop() {
     display.showNumberDec(0);
     displayTemp = false;
   }
+
+  readBatt();
 }
 
 
 void reInitAlarm() {
   HC12Sleep();
-  
+
   attachInterrupt(0, interruptHandler, LOW);//attaching a interrupt to pin d2
   attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
+
+  digitalWrite(displayPin, LOW);
+
   LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
   detachInterrupt(0);
 
@@ -163,6 +178,8 @@ void initialiseClock() {
 }
 
 void handleDisplayTemp() {
+  digitalWrite(displayPin, HIGH);
+  //  delay(10);
 
   display.setBrightness(7, true);
   display.showNumberDec((int)temperatureF);
@@ -206,7 +223,7 @@ void sendTemperature() {
   Serial.print('>');
   Serial.flush();
 
-  delay(2000);//wait for the HC12 to have time to transmit before shutting down.. 
+  delay(2000);//wait for the HC12 to have time to transmit before shutting down..
 }
 // put HC-12 module into sleep mode
 void HC12Sleep() {
@@ -230,7 +247,7 @@ void sendH12Cmd(const char cmd[]) {
 
   digitalWrite(hc12SetPin, HIGH);
   delay(hc12setHighTime);
-  
+
   awaitHC12Response();
 }
 void awaitHC12Response() {
@@ -252,6 +269,12 @@ void awaitHC12Response() {
     }
     counter++;
   }
+}
+
+void readBatt() {
+  batteryADCReading = analogRead(batterySense);
+
+  batteryVoltage = (batteryADCReading * 5.0) / 1024.0;
 }
 
 
