@@ -122,10 +122,10 @@ void loop() {
 
     if (psStartHour > 0 && psEndHour > 0 && ( hour(myTime) >= psStartHour || hour(myTime) < psEndHour ) ) {
       //    Serial.println("Power saving time");
-      ALARM_INTERVAL = psInterval;
+      ALARM_INTERVAL = psInterval * 60;
     } else {
       //     Serial.println("Normal Time");
-      ALARM_INTERVAL = intervals;
+      ALARM_INTERVAL = intervals * 60;
     }
 
     reInitAlarm(); //re initialize alarm and go to sleep
