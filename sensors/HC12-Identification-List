@@ -3,11 +3,11 @@ Every sensors that use the HC-12 will have an identifier.
 
 Project name				Identifier				comment
 Attiny85_HC12_LED			 A1						- used for the garage LED 
-Attiny86_pool_sensor		 A2						 (Pool)
+pool_sensor		 			 P1						 (Pool)
+HC12_SI7021_tempSensor			 T1						 (Temperature)
 
 
 
-Temp/humidity sensor = A3
 
 
 

@@ -1,20 +1,13 @@
+#include <EEPROM.h>
+#include <SystemStatus.h>
 #include <DS3232RTC.h>
 
 // arduino with internal christal 8mhz
-#include <JC_Button.h>
+#include <JC_Button.h>  // https://github.com/JChristensen/JC_Button
 #include <TM1637Display.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include "LowPower.h"
-
-const uint8_t SEG_ERR[] = {
-  SEG_A | SEG_D | SEG_E | SEG_F | SEG_G, // E
-  SEG_E | SEG_G,                         // r
-  SEG_E | SEG_G,                         // r
-  0,                                     // space
-};
-
-char identifier[] = "A2"; //increment everytime a new one is created..
 
 // Module connection pins (Digital Pins)
 #define CLK 4
@@ -24,8 +17,37 @@ const uint8_t BTN1_PIN = 3;              // connect a button switch from this pi
 const uint8_t INTERRUPT_PIN = 2;
 const uint8_t INTERRUPT_PIN2 = 3;
 const uint8_t hc12SetPin = 8;
-const uint8_t batterySense = A0;
 const uint8_t displayPin = 9;
+
+const uint8_t SEG_ERR[] = {
+  SEG_A | SEG_D | SEG_E | SEG_F | SEG_G, // E
+  SEG_E | SEG_G,                         // r
+  SEG_E | SEG_G,                         // r
+  0,                                     // space
+};
+const char START_MARKER = '<';
+const char END_MARKER = '>';
+const char SENSOR_TYPE = 'p'; //the tyoe of sensor..
+const char DATA_CMD = 'd'; //
+const char INIT_CMD = 'i'; //
+const char START_CMD = 's'; //
+const char SEPERATOR = ','; //
+
+char identifier[4] = ""; //increment everytime a new one is created..
+
+const byte numChars = 36;
+char receivedChars[numChars];
+char tempChars[numChars];        // temporary array for use when parsing
+boolean newData = false;
+
+int intervals = 60; //seconds
+int psStartHour = 0; //variables for power save
+int psEndHour = 0;
+int psInterval = 0;
+
+boolean ackRecieved = false;
+unsigned long startWait = 0;
+unsigned long waitUntil = 120000;
 
 TM1637Display display(CLK, DIO);
 OneWire oneWire(ONE_WIRE_BUS);
@@ -36,24 +58,23 @@ Button btn1(BTN1_PIN);       // define the button
 boolean displayTemp = false;
 unsigned long prevTempDisplay = 0;
 float temperatureF = 0.0;
-int batteryADCReading = 0;
-float batteryVoltage = 0.0;
 
 // these values are taken from the HC-12 documentation v2 (+10ms for safety)
 const unsigned long hc12setHighTime = 90;
 const unsigned long hc12setLowTime = 50;
 const unsigned long hc12cmdTime = 100;
 
-time_t ALARM_INTERVAL(5 * 60);    // alarm interval in seconds
+time_t ALARM_INTERVAL(1 * 60);    // alarm interval in seconds
 
-void interruptHandler()
-{
-
+void interruptHandler() {
 }
 void bntInterrupt() {
   detachInterrupt(1);
   displayTemp = true;
 }
+
+void(* resetFunc) (void) = 0;
+
 void setup() {
 
   //H12 transmitter
@@ -62,10 +83,7 @@ void setup() {
   pinMode(INTERRUPT_PIN, INPUT_PULLUP);
   pinMode(INTERRUPT_PIN2, INPUT_PULLUP);
   pinMode(hc12SetPin, OUTPUT);
-  pinMode(batterySense, INPUT);
   pinMode(displayPin, OUTPUT);
-
-  batteryADCReading = analogRead(batterySense);
 
   digitalWrite(displayPin, HIGH);
 
@@ -82,24 +100,35 @@ void setup() {
 
   btn1.begin();
 
-  displayConfig();
+  randomSeed(analogRead(0));
 
-  initialiseClock();
-  Serial.print('<');
-  Serial.print(identifier);
-  Serial.print(F("started"));
-  Serial.print(ALARM_INTERVAL);
-  Serial.print('>');
-  Serial.flush();
-  sendTemperature();
+  //display 0;
+  display.setBrightness(7, true);
+  display.showNumberDec(0);
   delay(2000);
+  display.setBrightness(7, false);
+  display.showNumberDec(0);
+  
+  start();
 }
 
 void loop() {
 
+
+
   if (!displayTemp) {
 
-    reInitAlarm();
+    time_t myTime = RTC.get();
+
+    if (psStartHour > 0 && psEndHour > 0 && ( hour(myTime) >= psStartHour || hour(myTime) < psEndHour ) ) {
+      //    Serial.println("Power saving time");
+      ALARM_INTERVAL = psInterval;
+    } else {
+      //     Serial.println("Normal Time");
+      ALARM_INTERVAL = intervals;
+    }
+
+    reInitAlarm(); //re initialize alarm and go to sleep
     if (sensors.getDS18Count() != 0 ) {
       if (displayTemp) {
         handleDisplayTemp();
@@ -116,34 +145,33 @@ void loop() {
     displayTemp = false;
   }
 
-  readBatt();
 }
-
-
 void reInitAlarm() {
   HC12Sleep();
+
+  time_t t = RTC.get();
+  time_t alarmTime = t + ALARM_INTERVAL;
+  //Set New Alarm
+  RTC.setAlarm(ALM1_MATCH_HOURS, second(alarmTime), minute(alarmTime), hour(alarmTime), 0);
+  // clear the alarm flag
+  RTC.alarm(ALARM_1);
 
   attachInterrupt(0, interruptHandler, LOW);//attaching a interrupt to pin d2
   attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
 
   digitalWrite(displayPin, LOW);
 
+  //sleep
   LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
+
   detachInterrupt(0);
 
   HC12Wake();
 
-  time_t t = RTC.get();
-  time_t alarmTime = t + ALARM_INTERVAL;
-  //Set New Alarm
-  //  RTC.setAlarm(ALM1_MATCH_MINUTES , 0, minute(t) + time_interval, 0, 0);
-  RTC.setAlarm(ALM1_MATCH_HOURS, second(alarmTime), minute(alarmTime), hour(alarmTime), 0);
-  // clear the alarm flag
-  RTC.alarm(ALARM_1);
   //  printAlarm(t);
 
 }
-void initialiseClock() {
+void initialiseClock(long timeInSeconds) {
   // initialize the alarms to known values, clear the alarm flags, clear the alarm interrupt flags
   RTC.setAlarm(ALM1_MATCH_DATE, 0, 0, 0, 1);
   RTC.setAlarm(ALM2_MATCH_DATE, 0, 0, 0, 1);
@@ -153,20 +181,11 @@ void initialiseClock() {
   RTC.alarmInterrupt(ALARM_2, false);
   RTC.squareWave(SQWAVE_NONE);
 
-  tmElements_t tm;
-  tm.Hour = 00;               // set the RTC to an arbitrary time
-  tm.Minute = 00;
-  tm.Second = 00;
-  tm.Day = 4;
-  tm.Month = 2;
-  tm.Year = 2021 - 1970;      // tmElements_t.Year is the offset from 1970
-  time_t t = makeTime(tm);        // change the tm structure into time_t (seconds since epoch)
-  time_t alarmTime = t + ALARM_INTERVAL;    // calculate the alarm time
+  //  time_t alarmTime = timeInSeconds + ALARM_INTERVAL;    // calculate the alarm time
 
   // set the current time
-  RTC.set(t);
-  //  RTC.setAlarm(ALM1_MATCH_MINUTES , 0, minute(t) + time_interval, 0, 0); // Setting alarm 1 to go off 5 minutes from now
-  RTC.setAlarm(ALM1_MATCH_HOURS, second(alarmTime), minute(alarmTime), hour(alarmTime), 0);
+  RTC.set(timeInSeconds);
+  //  RTC.setAlarm(ALM1_MATCH_HOURS, second(alarmTime), minute(alarmTime), hour(alarmTime), 0);
 
   // clear the alarm flag
   RTC.alarm(ALARM_1);
@@ -185,45 +204,28 @@ void handleDisplayTemp() {
   display.showNumberDec((int)temperatureF);
 }
 
-void displayConfig() {
-  unsigned long currMillis = millis();
-  display.setBrightness(7, true);
-  uint8_t intv = 1;
-
-  display.showNumberDec(intv);
-  currMillis = millis();
-
-  while (true) {
-    btn1.read();
-    if (btn1.wasPressed()) {
-
-      if (intv < 250) {
-        intv++;
-      }
-      display.showNumberDec(intv);
-      currMillis = millis();
-    }
-
-    if (millis() - currMillis > 5000) {
-      break;
-    }
-
-  }
-  ALARM_INTERVAL = intv * 60;
-
-  display.setBrightness(7, false);
-  display.showNumberDec(0);
-}
 void sendTemperature() {
+  //  Serial.println("send temp"); //alex
+  ackRecieved = false;
   sensors.requestTemperatures();
   temperatureF =     sensors.getTempFByIndex(0);
-  Serial.print('<');
+  Serial.print(START_MARKER);
+  Serial.print(DATA_CMD);  //telling the recieved that we are sending data.
+  Serial.print(SENSOR_TYPE);
   Serial.print(identifier);
+  Serial.print(SEPERATOR);
   Serial.print(temperatureF);
-  Serial.print('>');
+  Serial.print(SEPERATOR);
+  Serial.print(SystemStatus().getVCC());
+  Serial.print(END_MARKER);
   Serial.flush();
 
-  delay(2000);//wait for the HC12 to have time to transmit before shutting down..
+  // wait for Ack or more than 30 seconds, then continue
+  unsigned long wait = millis();
+  while (!ackRecieved && (millis() - wait > 30000) ) {
+    recvWithStartEndMarkers() ;
+    handleData();
+  }
 }
 // put HC-12 module into sleep mode
 void HC12Sleep() {
@@ -247,35 +249,197 @@ void sendH12Cmd(const char cmd[]) {
 
   digitalWrite(hc12SetPin, HIGH);
   delay(hc12setHighTime);
-
-  awaitHC12Response();
 }
-void awaitHC12Response() {
-  uint8_t counter = 0;
-  boolean breakLoop = false;
-  //wait
-  while (counter < 10) { //wait for answer up to 1 second
-    while (Serial.available()  > 0 ) {
-      breakLoop = true;
-      char r = Serial.read();
-      if (r == 'O') {
-        //we found the letter O.
-        break;
+void start() {
+
+  boolean rstId = false;
+  boolean idExist = true;
+  btn1.read();//function to reset the ID of the sensor if conflict or need to reset the ID
+
+  if (btn1.isPressed()) {
+    rstId = true;
+  }
+
+  //check if ID exist for sensor
+  uint8_t address = 0;
+  int result = EEPROM.read(address);
+  if (result == 255 || rstId) {
+    int randNumber = random(0, 10);
+    char tmp[2];
+    itoa(randNumber, tmp, 10);
+    identifier[0] = 'A';
+    identifier[1] = 'A';
+    identifier[2] = tmp[0];
+    idExist = false;
+  } else {
+    EEPROM.get(address, identifier);
+  }
+  address = sizeof(identifier);
+
+  int intv = EEPROM.read(address);
+  if (intv == 255) {
+    //using 5 min as default
+    intervals = 301;
+  } else {
+    EEPROM.get(address, intervals);
+  }
+
+  //send identifier and wait for reply (2 min)
+  Serial.print(START_MARKER);
+  if (!idExist) {
+    Serial.print(START_CMD);
+  } else {
+    Serial.print(INIT_CMD);
+  }
+  Serial.print(SENSOR_TYPE);
+  Serial.print(identifier);
+  Serial.print(END_MARKER);
+  Serial.flush();
+
+  while ( millis() - startWait < waitUntil && !ackRecieved) { //2 min wait time
+    recvWithStartEndMarkers();
+    handleData();
+  }
+
+  if (!ackRecieved) {
+    attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
+    digitalWrite(displayPin, LOW);
+    LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
+    resetFunc();
+  }
+
+}
+
+void recvWithStartEndMarkers() {
+  static boolean recvInProgress = false;
+  static byte ndx = 0;
+  char startMarker = '<';
+  char endMarker = '>';
+  char rc;
+
+  while (Serial.available() > 0 && newData == false) {
+    rc = Serial.read();
+
+    if (recvInProgress == true) {
+      if (rc != endMarker) {
+        receivedChars[ndx] = rc;
+        ndx++;
+        if (ndx >= numChars) {
+          ndx = numChars - 1;
+        }
+      }
+      else {
+        receivedChars[ndx] = '\0'; // terminate the string
+        recvInProgress = false;
+        ndx = 0;
+        newData = true;
       }
     }
-    delay(100);
-    if (breakLoop) {
-      break;
+
+    else if (rc == startMarker) {
+      recvInProgress = true;
     }
-    counter++;
   }
 }
 
-void readBatt() {
-  batteryADCReading = analogRead(batterySense);
+void handleData() {
+  char cmd;
+  int eeAddr = 0;
+  char tempId[6];
 
-  batteryVoltage = (batteryADCReading * 5.0) / 1024.0;
+  if (newData == true) {
+    //    Serial.print("This just in ... ");
+    //    Serial.println(receivedChars);
+    newData = false;
+    cmd = receivedChars[0];
+
+    if (cmd == START_CMD && receivedChars[1] == SENSOR_TYPE) {
+
+      strcpy(tempChars, receivedChars);
+      char * strtokIndx; // this is used by strtok() as an index
+
+      strtokIndx = strtok(tempChars, ",");     // get the first part - the string
+      strcpy(tempId, strtokIndx); // copy it to  the identifier
+
+      if (identifier[0] == tempId[2] && identifier[1] == tempId[3] && identifier[2] == tempId[4]) {
+        strtokIndx = strtok(NULL, ","); // this continues where the previous call left off
+        strcpy(tempId, strtokIndx);
+
+        identifier[0] = tempId[0];
+        identifier[1] = tempId[1];
+        identifier[2] = tempId[2];
+        EEPROM.put(eeAddr, identifier);
+        waitUntil = 600000;
+        startWait = millis();
+        sendOk(START_CMD);
+      }
+
+    } else   if (cmd == INIT_CMD && receivedChars[1] == SENSOR_TYPE) { //init command recieved
+
+      strcpy(tempChars, receivedChars);
+      char * strtokIndx; // this is used by strtok() as an index
+
+      char tempId[6];
+      strtokIndx = strtok(tempChars, ",");     // get the first part -  the identifier
+      strcpy(tempId, strtokIndx); // copy it to  the identifier
+
+      if (idMatch()) {
+        eeAddr = sizeof(identifier);
+
+        strtokIndx = strtok(NULL, ","); // date in milliseconds
+        long dateInMillis = atol(strtokIndx);     // convert this part to an integer
+
+        int tmpIntv = 0;
+        strtokIndx = strtok(NULL, ","); // this continues where the previous call left off
+        tmpIntv = atoi(strtokIndx);     // convert this part to an integer
+
+        if (tmpIntv != intervals) {
+          intervals = tmpIntv;
+          EEPROM.put(eeAddr, intervals);
+        }
+
+        strtokIndx = strtok(NULL, ","); // this continues where the previous call left off
+        psStartHour = atoi(strtokIndx);     // convert this part to an integer
+
+        strtokIndx = strtok(NULL, ","); // this continues where the previous call left off
+        psEndHour = atoi(strtokIndx);     // convert this part to an integer
+
+
+        strtokIndx = strtok(NULL, ","); // this continues where the previous call left off
+        psInterval = atoi(strtokIndx);     // convert this part to an integer
+
+        initialiseClock(dateInMillis);
+
+        ackRecieved = true;
+        sendOk(INIT_CMD);
+      }
+    } else if (cmd == 'o' && receivedChars[1] == SENSOR_TYPE && idMatch()) { //ok command recieved
+      ackRecieved = true;
+    }
+  }
 }
+
+boolean idMatch() {
+  if (identifier[0] == receivedChars[2] &&
+      identifier[1] == receivedChars[3] &&
+      identifier[2] == receivedChars[4] ) {
+
+    return true;
+  }
+
+  return false;
+}
+
+void sendOk(char cmd) {
+  Serial.print(START_MARKER);
+  Serial.print(cmd);
+  Serial.print(SENSOR_TYPE);
+  Serial.print(identifier);
+  Serial.print(F("ok"));
+  Serial.print(END_MARKER);
+  Serial.flush();
+}
+
 
 
 //void printAlarm(time_t t) {
@@ -293,58 +457,4 @@ void readBatt() {
 //  Serial.print(second(t));
 //  Serial.print(F(" time T: "));
 //  Serial.println(t);
-//}
-
-
-//requirement
-//take pool reading every 20 mintues then sleep
-//if the display button is pressed, display temperature.
-//ability to change sleep time..
-//inside case
-//2 buttons -- press button 1: mode 1 = run normal, mode 2= set time to sleep.
-//            -- press button 2 - enable the prev selected mode ( if mode 1 selected, then nothing else to do) , mode 2 - display time to sleep
-//          -- press button 1 - increase by 1 min until 60 minutes. press button 2 to enable.
-//outside 1 button, display time when pressed.
-//when turning on, display temp, send 1st reading then sleep. 20sec delay.
-//when running . if button is presses, wake up, display temp then go back to sleep after 30 sec.
-//when running , if confing button 1 pressed, wake up and enter cfg mode.
-
-
-
-
-//// Arduino Button Library
-//// https://github.com/JChristensen/JC_Button
-//// Copyright (C) 2018 by Jack Christensen and licensed under
-//// GNU GPL v3.0, https://www.gnu.org/licenses/gpl.html
-////
-//// Example sketch to turn an LED on and off with a tactile button switch.
-//// Wire the switch from the Arduino pin to ground.
-//
-//#include <JC_Button.h>          // https://github.com/JChristensen/JC_Button
-//
-//// pin assignments
-//const byte
-//BUTTON_PIN(5),              // connect a button switch from this pin to ground
-//           LED_PIN(4);                // the standard Arduino "pin 13" LED
-//
-//Button myBtn(BUTTON_PIN);       // define the button
-//
-//void setup()
-//{
-//  myBtn.begin();              // initialize the button object
-//  pinMode(LED_PIN, OUTPUT);   // set the LED pin as an output
-//}
-//
-//void loop()
-//{
-//  static bool ledState;       // a variable that keeps the current LED status
-//  myBtn.read();               // read the button
-//
-//  if (myBtn.wasPressed())    // if the button was released, change the LED state
-//  {
-//    //        ledState = !ledState;
-//    digitalWrite(LED_PIN, HIGH);
-//  } else if (myBtn.wasReleased())  {
-//    digitalWrite(LED_PIN, LOW);
-//  }
 //}

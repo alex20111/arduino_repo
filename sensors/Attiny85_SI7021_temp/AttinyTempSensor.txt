@@ -1,0 +1,7 @@
+Library:
+https://github.com/LowPowerLab/SI7021
+	- you need to remove the reference to Arduino.h and Wire.h
+	-TinyWireM from adafruit needs to be installed.
+	
+https://github.com/cano64/ArduinoSystemStatus  (get voltage and sleep)
+	- the "SystemStatus" needs to be installed
