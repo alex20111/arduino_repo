@@ -1,7 +1,6 @@
 #include <EEPROM.h>
 #include <SystemStatus.h>
 #include <DS3232RTC.h>
-
 // arduino with internal christal 8mhz
 #include <JC_Button.h>  // https://github.com/JChristensen/JC_Button
 #include <TM1637Display.h>
@@ -40,7 +39,7 @@ char receivedChars[numChars];
 char tempChars[numChars];        // temporary array for use when parsing
 boolean newData = false;
 
-int intervals = 60; //seconds
+int intervals = 1; //minutes
 int psStartHour = 0; //variables for power save
 int psEndHour = 0;
 int psInterval = 0;
@@ -108,25 +107,13 @@ void setup() {
   delay(2000);
   display.setBrightness(7, false);
   display.showNumberDec(0);
-  
+  digitalWrite(displayPin, LOW);
   start();
 }
 
 void loop() {
-
-
-
   if (!displayTemp) {
-
-    time_t myTime = RTC.get();
-
-    if (psStartHour > 0 && psEndHour > 0 && ( hour(myTime) >= psStartHour || hour(myTime) < psEndHour ) ) {
-      //    Serial.println("Power saving time");
-      ALARM_INTERVAL = psInterval * 60;
-    } else {
-      //     Serial.println("Normal Time");
-      ALARM_INTERVAL = intervals * 60;
-    }
+setSleepIntervals();
 
     reInitAlarm(); //re initialize alarm and go to sleep
     if (sensors.getDS18Count() != 0 ) {
@@ -167,10 +154,8 @@ void reInitAlarm() {
   detachInterrupt(0);
 
   HC12Wake();
-
-  //  printAlarm(t);
-
 }
+
 void initialiseClock(long timeInSeconds) {
   // initialize the alarms to known values, clear the alarm flags, clear the alarm interrupt flags
   RTC.setAlarm(ALM1_MATCH_DATE, 0, 0, 0, 1);
@@ -181,11 +166,8 @@ void initialiseClock(long timeInSeconds) {
   RTC.alarmInterrupt(ALARM_2, false);
   RTC.squareWave(SQWAVE_NONE);
 
-  //  time_t alarmTime = timeInSeconds + ALARM_INTERVAL;    // calculate the alarm time
-
   // set the current time
   RTC.set(timeInSeconds);
-  //  RTC.setAlarm(ALM1_MATCH_HOURS, second(alarmTime), minute(alarmTime), hour(alarmTime), 0);
 
   // clear the alarm flag
   RTC.alarm(ALARM_1);
@@ -193,12 +175,10 @@ void initialiseClock(long timeInSeconds) {
   RTC.squareWave(SQWAVE_NONE);
   // enable interrupt output for Alarm 1
   RTC.alarmInterrupt(ALARM_1, true);
-
 }
 
 void handleDisplayTemp() {
   digitalWrite(displayPin, HIGH);
-  //  delay(10);
 
   display.setBrightness(7, true);
   display.showNumberDec((int)temperatureF);
@@ -222,7 +202,7 @@ void sendTemperature() {
 
   // wait for Ack or more than 30 seconds, then continue
   unsigned long wait = millis();
-  while (!ackRecieved && (millis() - wait > 30000) ) {
+  while (!ackRecieved && millis() - wait < 30000 ) {
     recvWithStartEndMarkers() ;
     handleData();
   }
@@ -279,7 +259,7 @@ void start() {
   int intv = EEPROM.read(address);
   if (intv == 255) {
     //using 5 min as default
-    intervals = 301;
+    intervals = 5; //minutes
   } else {
     EEPROM.get(address, intervals);
   }
@@ -302,12 +282,12 @@ void start() {
   }
 
   if (!ackRecieved) {
+//    debug(99);
     attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
     digitalWrite(displayPin, LOW);
     LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     resetFunc();
   }
-
 }
 
 void recvWithStartEndMarkers() {
@@ -335,7 +315,6 @@ void recvWithStartEndMarkers() {
         newData = true;
       }
     }
-
     else if (rc == startMarker) {
       recvInProgress = true;
     }
@@ -348,8 +327,9 @@ void handleData() {
   char tempId[6];
 
   if (newData == true) {
-    //    Serial.print("This just in ... ");
-    //    Serial.println(receivedChars);
+    //        Serial.print("This just in ... ");
+    //        Serial.println(receivedChars);
+    //        Serial.println(identifier);
     newData = false;
     cmd = receivedChars[0];
 
@@ -379,11 +359,12 @@ void handleData() {
       strcpy(tempChars, receivedChars);
       char * strtokIndx; // this is used by strtok() as an index
 
-      char tempId[6];
       strtokIndx = strtok(tempChars, ",");     // get the first part -  the identifier
       strcpy(tempId, strtokIndx); // copy it to  the identifier
+//      debug(1);
 
       if (idMatch()) {
+//        debug(4);
         eeAddr = sizeof(identifier);
 
         strtokIndx = strtok(NULL, ","); // date in milliseconds
@@ -404,7 +385,6 @@ void handleData() {
         strtokIndx = strtok(NULL, ","); // this continues where the previous call left off
         psEndHour = atoi(strtokIndx);     // convert this part to an integer
 
-
         strtokIndx = strtok(NULL, ","); // this continues where the previous call left off
         psInterval = atoi(strtokIndx);     // convert this part to an integer
 
@@ -412,7 +392,9 @@ void handleData() {
 
         ackRecieved = true;
         sendOk(INIT_CMD);
+//        debug(2);
       }
+//      debug(5);
     } else if (cmd == 'o' && receivedChars[1] == SENSOR_TYPE && idMatch()) { //ok command recieved
       ackRecieved = true;
     }
@@ -423,10 +405,8 @@ boolean idMatch() {
   if (identifier[0] == receivedChars[2] &&
       identifier[1] == receivedChars[3] &&
       identifier[2] == receivedChars[4] ) {
-
     return true;
   }
-
   return false;
 }
 
@@ -439,7 +419,25 @@ void sendOk(char cmd) {
   Serial.print(END_MARKER);
   Serial.flush();
 }
+void debug(uint8_t cnt) {
+  digitalWrite(displayPin, HIGH);
+  display.setBrightness(7, true);
+  display.showNumberDec(cnt);
+}
 
+void setSleepIntervals(){
+  
+    time_t myTime = RTC.get();
+
+    if (psStartHour > 0 && psEndHour > 0 && 
+        ( psStartHour < psEndHour && hour(myTime) >= psStartHour && hour(myTime) < psEndHour ) ||
+          (psStartHour > psEndHour && ( hour(myTime) >= psStartHour || hour(myTime) < psEndHour) ) ){
+
+      ALARM_INTERVAL = psInterval * 60;
+    } else {
+      ALARM_INTERVAL = intervals * 60;
+    }
+}
 
 
 //void printAlarm(time_t t) {
