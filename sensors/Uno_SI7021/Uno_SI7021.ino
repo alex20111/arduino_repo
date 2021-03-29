@@ -3,30 +3,19 @@
 #include <DS3232RTC.h>
 // arduino with internal christal 8mhz
 #include <JC_Button.h>  // https://github.com/JChristensen/JC_Button
-#include <TM1637Display.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
 #include "LowPower.h"
+#include <SI7021.h>
 
 // Module connection pins (Digital Pins)
-#define CLK 4
-#define DIO 5
-#define ONE_WIRE_BUS 7
 const uint8_t BTN1_PIN = 3;              // connect a button switch from this pin to ground
 const uint8_t INTERRUPT_PIN = 2;
 const uint8_t INTERRUPT_PIN2 = 3;
 const uint8_t hc12SetPin = 8;
-const uint8_t displayPin = 9;
+const uint8_t SI7021Power = 9;
 
-const uint8_t SEG_ERR[] = {
-  SEG_A | SEG_D | SEG_E | SEG_F | SEG_G, // E
-  SEG_E | SEG_G,                         // r
-  SEG_E | SEG_G,                         // r
-  0,                                     // space
-};
 const char START_MARKER = '<';
 const char END_MARKER = '>';
-const char SENSOR_TYPE = 'p'; //the tyoe of sensor..
+const char SENSOR_TYPE = 't'; //the tyoe of sensor..
 const char DATA_CMD = 'd'; //
 const char INIT_CMD = 'i'; //
 const char START_CMD = 's'; //
@@ -48,14 +37,8 @@ boolean ackRecieved = false;
 unsigned long startWait = 0;
 unsigned long waitUntil = 120000;
 
-TM1637Display display(CLK, DIO);
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature sensors(&oneWire);
-
 Button btn1(BTN1_PIN);       // define the button
 
-boolean displayTemp = false;
-unsigned long prevTempDisplay = 0;
 float temperatureF = 0.0;
 
 // these values are taken from the HC-12 documentation v2 (+10ms for safety)
@@ -63,11 +46,12 @@ const unsigned long hc12setHighTime = 90;
 const unsigned long hc12setLowTime = 50;
 const unsigned long hc12cmdTime = 100;
 
+SI7021 sensor;
+
 void interruptHandler() {
 }
 void bntInterrupt() {
   detachInterrupt(1);
-  displayTemp = true;
 }
 
 void(* resetFunc) (void) = 0;
@@ -79,54 +63,31 @@ void setup() {
   pinMode(INTERRUPT_PIN, INPUT_PULLUP);
   pinMode(INTERRUPT_PIN2, INPUT_PULLUP);
   pinMode(hc12SetPin, OUTPUT);
-  pinMode(displayPin, OUTPUT);
+  pinMode(SI7021Power, OUTPUT);
 
-  digitalWrite(displayPin, HIGH);
   digitalWrite(hc12SetPin, HIGH);
+  digitalWrite(SI7021Power, HIGH);
 
   attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
-  //TM1637
-  display.setBrightness(0x02);
-
-  //dallas thermometer
-  sensors.begin();
-  if (sensors.getDS18Count() == 0)
-    display.setSegments(SEG_ERR);
 
   btn1.begin();
 
   randomSeed(analogRead(0));
 
-  //display 0;
-  display.setBrightness(7, true);
-  display.showNumberDec(0);
   delay(2000);
-  display.setBrightness(7, false);
-  display.showNumberDec(0);
-  digitalWrite(displayPin, LOW);
+
+  sensor.begin();
+
   start();
 }
 
 void loop() {
-  if (!displayTemp) {
+
   setSleepIntervals();
 
-    reInitAlarm(); //re initialize alarm and go to sleep
-    if (sensors.getDS18Count() != 0 ) {
-      if (displayTemp) {
-        handleDisplayTemp();
-        prevTempDisplay = millis();
-      }
-      sendTemperature();
-    }
-  }
+  reInitAlarm(); //re initialize alarm and go to sleep
 
-  //reset temp display and turn off
-  if (millis() - prevTempDisplay > 20000 && displayTemp) { //20 seconds
-    display.setBrightness(7, false);
-    display.showNumberDec(0);
-    displayTemp = false;
-  }
+  sendTemperature();
 
 }
 void reInitAlarm() {
@@ -142,10 +103,12 @@ void reInitAlarm() {
   attachInterrupt(0, interruptHandler, LOW);//attaching a interrupt to pin d2
   attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
 
-  digitalWrite(displayPin, LOW);
+  digitalWrite(SI7021Power, LOW);
 
   //sleep
   LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
+
+  digitalWrite(SI7021Power, HIGH);
 
   detachInterrupt(0);
 
@@ -173,24 +136,18 @@ void initialiseClock(long timeInSeconds) {
   RTC.alarmInterrupt(ALARM_1, true);
 }
 
-void handleDisplayTemp() {
-  digitalWrite(displayPin, HIGH);
-
-  display.setBrightness(7, true);
-  display.showNumberDec((int)temperatureF);
-}
-
 void sendTemperature() {
-  //  Serial.println("send temp"); //alex
   ackRecieved = false;
-  sensors.requestTemperatures();
-  temperatureF =     sensors.getTempFByIndex(0);
+  si7021_env data = sensor.getHumidityAndTemperature();
+
   Serial.print(START_MARKER);
   Serial.print(DATA_CMD);  //telling the recieved that we are sending data.
   Serial.print(SENSOR_TYPE);
   Serial.print(identifier);
   Serial.print(SEPERATOR);
-  Serial.print(temperatureF);
+  Serial.print(data.celsiusHundredths);
+  Serial.print(SEPERATOR);
+  Serial.print(data.humidityBasisPoints);
   Serial.print(SEPERATOR);
   Serial.print(SystemStatus().getVCC());
   Serial.print(END_MARKER);
@@ -279,9 +236,7 @@ void start() {
   }
 
   if (!ackRecieved) {
-//    debug(99);
     attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
-    digitalWrite(displayPin, LOW);
     LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     resetFunc();
   }
@@ -356,10 +311,8 @@ void handleData() {
 
       strtokIndx = strtok(tempChars, ",");     // get the first part -  the identifier
       strcpy(tempId, strtokIndx); // copy it to  the identifier
-//      debug(1);
 
       if (idMatch()) {
-//        debug(4);
         eeAddr = sizeof(identifier);
 
         strtokIndx = strtok(NULL, ","); // date in milliseconds
@@ -389,7 +342,6 @@ void handleData() {
         sendOk(INIT_CMD);
         delay(2000);// to leave time for the OK to be sent before sleeping..
       }
-//      debug(5);
     } else if (cmd == 'o' && receivedChars[1] == SENSOR_TYPE && idMatch()) { //ok command recieved
       ackRecieved = true;
     }
@@ -414,24 +366,19 @@ void sendOk(char cmd) {
   Serial.print(END_MARKER);
   Serial.flush();
 }
-void debug(uint8_t cnt) {
-  digitalWrite(displayPin, HIGH);
-  display.setBrightness(7, true);
-  display.showNumberDec(cnt);
-}
 
-void setSleepIntervals(){
-  
-    time_t myTime = RTC.get();
+void setSleepIntervals() {
 
-    if (psStartHour > 0 && psEndHour > 0 && 
-        ( psStartHour < psEndHour && hour(myTime) >= psStartHour && hour(myTime) < psEndHour ) ||
-          (psStartHour > psEndHour && ( hour(myTime) >= psStartHour || hour(myTime) < psEndHour) ) ){
+  time_t myTime = RTC.get();
 
-      ALARM_INTERVAL = psInterval * 60;
-    } else {
-      ALARM_INTERVAL = intervals * 60;
-    }
+  if (psStartHour > 0 && psEndHour > 0 &&
+      ( psStartHour < psEndHour && hour(myTime) >= psStartHour && hour(myTime) < psEndHour ) ||
+      (psStartHour > psEndHour && ( hour(myTime) >= psStartHour || hour(myTime) < psEndHour) ) ) {
+
+    ALARM_INTERVAL = psInterval * 60;
+  } else {
+    ALARM_INTERVAL = intervals * 60;
+  }
 }
 
 
