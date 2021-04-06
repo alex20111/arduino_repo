@@ -48,6 +48,8 @@ const unsigned long hc12cmdTime = 100;
 
 SI7021 sensor;
 
+uint8_t numberOfRetries = 0; // number of retries on start up to connect to host
+
 void interruptHandler() {
 }
 void bntInterrupt() {
@@ -109,7 +111,6 @@ void reInitAlarm() {
   LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
 
   digitalWrite(SI7021Power, HIGH);
-
   detachInterrupt(0);
 
   HC12Wake();
@@ -171,6 +172,7 @@ void HC12Wake() {
   digitalWrite(hc12SetPin, HIGH);
   // wait some extra time
   delay(250);
+
 }
 void sendH12Cmd(const char cmd[]) {
   digitalWrite(hc12SetPin, LOW);
@@ -193,29 +195,35 @@ void start() {
     rstId = true;
   }
 
-  //check if ID exist for sensor
-  uint8_t address = 0;
-  int result = EEPROM.read(address);
-  if (result == 255 || rstId) {
-    int randNumber = random(0, 10);
-    char tmp[2];
-    itoa(randNumber, tmp, 10);
-    identifier[0] = 'A';
-    identifier[1] = 'A';
-    identifier[2] = tmp[0];
-    identifier[3] = '\0';
-    idExist = false;
-  } else {
-    EEPROM.get(address, identifier);
-  }
-  address = sizeof(identifier);
+  if (numberOfRetries == 0 || rstId) { //itf we are not retrying , then get the initial data.. if not we already have it.. 
+    numberOfRetries = 0;
+    //check if ID exist for sensor
+    uint8_t address = 0;
+    int result = EEPROM.read(address);
+    if (result == 255 || rstId) {
+      int randNumber = random(0, 10);
+      char tmp[2];
+      itoa(randNumber, tmp, 10);
+      identifier[0] = 'A';
+      identifier[1] = 'A';
+      identifier[2] = tmp[0];
+      identifier[3] = '\0';
+      idExist = false;
+    } else {
+      EEPROM.get(address, identifier);
+    }
+    address = sizeof(identifier);
 
-  int intv = EEPROM.read(address);
-  if (intv == 255) {
-    //using 5 min as default
-    intervals = 5; //minutes
-  } else {
-    EEPROM.get(address, intervals);
+    int intv = EEPROM.read(address);
+    if (intv == 255) {
+      //using 5 min as default
+      intervals = 5; //minutes
+    } else {
+      EEPROM.get(address, intervals);
+    }
+
+  }else if(numberOfRetries > 0 && identifier[0] == 'A' && identifier[1] == 'A'){
+    idExist = false;
   }
 
   //send identifier and wait for reply (2 min)
@@ -230,15 +238,25 @@ void start() {
   Serial.print(END_MARKER);
   Serial.flush();
 
+  startWait = millis();
+
   while ( millis() - startWait < waitUntil && !ackRecieved) { //2 min wait time
     recvWithStartEndMarkers();
     handleData();
   }
 
   if (!ackRecieved) {
-    attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
-    LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
-    resetFunc();
+    if (numberOfRetries < 8) {
+      numberOfRetries ++ ;
+      start();
+    } else {
+
+      digitalWrite(SI7021Power, LOW);
+      HC12Sleep();
+      attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
+      LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
+      resetFunc();
+    }
   }
 }
 

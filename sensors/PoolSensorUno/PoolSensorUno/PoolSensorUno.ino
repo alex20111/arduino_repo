@@ -63,6 +63,7 @@ const unsigned long hc12setHighTime = 90;
 const unsigned long hc12setLowTime = 50;
 const unsigned long hc12cmdTime = 100;
 
+uint8_t numberOfRetries = 0; // number of retries on start up to connect to host
 void interruptHandler() {
 }
 void bntInterrupt() {
@@ -109,7 +110,7 @@ void setup() {
 
 void loop() {
   if (!displayTemp) {
-  setSleepIntervals();
+    setSleepIntervals();
 
     reInitAlarm(); //re initialize alarm and go to sleep
     if (sensors.getDS18Count() != 0 ) {
@@ -125,6 +126,7 @@ void loop() {
   if (millis() - prevTempDisplay > 20000 && displayTemp) { //20 seconds
     display.setBrightness(7, false);
     display.showNumberDec(0);
+    display.clear();
     displayTemp = false;
   }
 
@@ -174,10 +176,16 @@ void initialiseClock(long timeInSeconds) {
 }
 
 void handleDisplayTemp() {
+  int temp = (int)temperatureF;
+  int spaces  = 2;
+  if (temp >= 100){
+    spaces = 3;
+  }
   digitalWrite(displayPin, HIGH);
 
   display.setBrightness(7, true);
-  display.showNumberDec((int)temperatureF);
+  display.showNumberDec(temp, false, spaces, 1);
+  
 }
 
 void sendTemperature() {
@@ -236,29 +244,35 @@ void start() {
     rstId = true;
   }
 
-  //check if ID exist for sensor
-  uint8_t address = 0;
-  int result = EEPROM.read(address);
-  if (result == 255 || rstId) {
-    int randNumber = random(0, 10);
-    char tmp[2];
-    itoa(randNumber, tmp, 10);
-    identifier[0] = 'A';
-    identifier[1] = 'A';
-    identifier[2] = tmp[0];
-    identifier[3] = '\0';
-    idExist = false;
-  } else {
-    EEPROM.get(address, identifier);
-  }
-  address = sizeof(identifier);
+  if (numberOfRetries == 0 || rstId) { //itf we are not retrying , then get the initial data.. if not we already have it..
+    numberOfRetries = 0;
+    //check if ID exist for sensor
+    uint8_t address = 0;
+    int result = EEPROM.read(address);
+    if (result == 255 || rstId) {
+      int randNumber = random(0, 10);
+      char tmp[2];
+      itoa(randNumber, tmp, 10);
+      identifier[0] = 'A';
+      identifier[1] = 'A';
+      identifier[2] = tmp[0];
+      identifier[3] = '\0';
+      idExist = false;
+    } else {
+      EEPROM.get(address, identifier);
+    }
+    address = sizeof(identifier);
 
-  int intv = EEPROM.read(address);
-  if (intv == 255) {
-    //using 5 min as default
-    intervals = 5; //minutes
-  } else {
-    EEPROM.get(address, intervals);
+    int intv = EEPROM.read(address);
+    if (intv == 255) {
+      //using 5 min as default
+      intervals = 5; //minutes
+    } else {
+      EEPROM.get(address, intervals);
+    }
+
+  } else if (numberOfRetries > 0 && identifier[0] == 'A' && identifier[1] == 'A') {
+    idExist = false;
   }
 
   //send identifier and wait for reply (2 min)
@@ -273,17 +287,24 @@ void start() {
   Serial.print(END_MARKER);
   Serial.flush();
 
+  startWait = millis();
+
   while ( millis() - startWait < waitUntil && !ackRecieved) { //2 min wait time
     recvWithStartEndMarkers();
     handleData();
   }
 
   if (!ackRecieved) {
-//    debug(99);
-    attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
-    digitalWrite(displayPin, LOW);
-    LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
-    resetFunc();
+    if (numberOfRetries < 8) {
+      numberOfRetries ++ ;
+      start();
+    } else {
+      HC12Sleep();
+      attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
+      digitalWrite(displayPin, LOW);
+      LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
+      resetFunc();
+    }
   }
 }
 
@@ -356,10 +377,10 @@ void handleData() {
 
       strtokIndx = strtok(tempChars, ",");     // get the first part -  the identifier
       strcpy(tempId, strtokIndx); // copy it to  the identifier
-//      debug(1);
+      //      debug(1);
 
       if (idMatch()) {
-//        debug(4);
+        //        debug(4);
         eeAddr = sizeof(identifier);
 
         strtokIndx = strtok(NULL, ","); // date in milliseconds
@@ -389,7 +410,7 @@ void handleData() {
         sendOk(INIT_CMD);
         delay(2000);// to leave time for the OK to be sent before sleeping..
       }
-//      debug(5);
+      //      debug(5);
     } else if (cmd == 'o' && receivedChars[1] == SENSOR_TYPE && idMatch()) { //ok command recieved
       ackRecieved = true;
     }
@@ -420,18 +441,18 @@ void debug(uint8_t cnt) {
   display.showNumberDec(cnt);
 }
 
-void setSleepIntervals(){
-  
-    time_t myTime = RTC.get();
+void setSleepIntervals() {
 
-    if (psStartHour > 0 && psEndHour > 0 && 
-        ( psStartHour < psEndHour && hour(myTime) >= psStartHour && hour(myTime) < psEndHour ) ||
-          (psStartHour > psEndHour && ( hour(myTime) >= psStartHour || hour(myTime) < psEndHour) ) ){
+  time_t myTime = RTC.get();
 
-      ALARM_INTERVAL = psInterval * 60;
-    } else {
-      ALARM_INTERVAL = intervals * 60;
-    }
+  if (psStartHour > 0 && psEndHour > 0 &&
+      ( psStartHour < psEndHour && hour(myTime) >= psStartHour && hour(myTime) < psEndHour ) ||
+      (psStartHour > psEndHour && ( hour(myTime) >= psStartHour || hour(myTime) < psEndHour) ) ) {
+
+    ALARM_INTERVAL = psInterval * 60;
+  } else {
+    ALARM_INTERVAL = intervals * 60;
+  }
 }
 
 
