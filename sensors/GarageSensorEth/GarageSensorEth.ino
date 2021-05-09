@@ -22,14 +22,14 @@ enum urlEnum {
 EthernetClient client; //dd:e4:98:ab:e7:59
 uint8_t mac[6] = {0xdd, 0xe4, 0x98, 0xab, 0xe7, 0x59}; //Arduino Uno pins: 10 = CS, 11 = MOSI, 12 = MISO, 13 = SCK
 
-IPAddress ip(192, 168, 1, 121);
+IPAddress ip(192, 168, 1, 187);
 IPAddress myDns(192, 168, 1, 1);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 0, 0);
 
 const char server[] = "192.168.1.110";
 
-unsigned long prevTimer = 0;
+//unsigned long prevTimer = 0;
 //unsigned long prevTim = 0; //remove
 
 String data = "";
@@ -44,9 +44,10 @@ const uint8_t ledConnected = 5; //connected to server // BLUE
 const uint8_t ledDoorStatus = 6; // YELLOW
 const uint8_t ledRespNotOk = 8; //RED LED
 const uint8_t doorPin = 7;
+const uint8_t ethReset = A7;
 
 uint8_t doorStatus = 0;
-uint8_t currentState = 0; // current state of the door that was sent to the server
+uint8_t currentState = 9; // current state of the door that was sent to the server
 boolean sendMessage = true;
 
 const byte numChars = 8;
@@ -62,11 +63,14 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 float temperatureCelcius = 0.0;
 unsigned long sensorDataSentTimer = 0;
+unsigned long ethernetMaintainPrevMillis = 0;
+//unsigned long resetEthernetPrev = 0;
 
 //Button
 Bounce doorSwitch = Bounce(); // Instantiate a Bounce object
 
 void setup() {
+ 
   data.reserve(40);
   //    Serial.begin(9600);
   //  Serial.println(F("Starting"));
@@ -83,7 +87,7 @@ void setup() {
 
   delay(2000);
 
-  prevTimer = millis() + 1800000;
+//  prevTimer = millis() + 1800000;
 
   digitalWrite(ledPowerOn, HIGH);
   //  Serial.println(Ethernet.localIP());
@@ -95,6 +99,20 @@ void setup() {
 }
 
 void loop() {
+
+  if (millis() - ethernetMaintainPrevMillis > 5000){
+    ethernetMaintainPrevMillis = millis();
+    Ethernet.maintain(); //every 30 seconds maintain
+  }
+
+  //every 24 hours , reset ethernet connection
+//   if (millis() - resetEthernetPrev > 86400000){
+
+//  if (millis() - resetEthernetPrev > 65000){
+//    resetEthernetPrev = millis();
+//    eth_reset(); //every 30 seconds maintain
+//    Serial.println(F("reset"));
+//  }
 
   doorSwitch.update();
 
@@ -128,13 +146,13 @@ void loop() {
       sendToClient(GARAGE_STATUS);
     }
 
-    if (millis() - prevTimer > 1800000) {  //3600000  // this will be the heart beat
-      pingServer();
-    }
+//    if (millis() - prevTimer > 1800000) {  //3600000  // this will be the heart beat
+//      pingServer();
+//    }
     if (millis() - sensorDataSentTimer > 300000) { // 5 min temperature sensor
       sensorDataSentTimer = millis();
       requestTemperature();
-      Ethernet.maintain();
+      
 
     }
 
@@ -228,12 +246,12 @@ void readEthernetReply() {
   }
 }
 
-void pingServer() {
-  //  Serial.println(F("Ping sent"));
-  prevTimer = millis();
-  data = (__FlashStringHelper *)pingText; // "{\"SensorId\":\"Garage Sensor\"}";
-  sendToClient(PING);
-}
+//void pingServer() {
+//  //  Serial.println(F("Ping sent"));
+//  prevTimer = millis();
+//  data = (__FlashStringHelper *)pingText; // "{\"SensorId\":\"Garage Sensor\"}";
+//  sendToClient(PING);
+//}
 void requestTemperature() {
   sensors.requestTemperatures();
   temperatureCelcius = sensors.getTempCByIndex(0);
@@ -245,11 +263,11 @@ void requestTemperature() {
 }
 
 void eth_reset() {
-  pinMode(4, OUTPUT);
-  digitalWrite(4, LOW);
+  pinMode(ethReset, OUTPUT);
+  digitalWrite(ethReset, LOW);
   delay(100);
-  digitalWrite(4, HIGH);
-  pinMode(4, INPUT);
+  digitalWrite(ethReset, HIGH);
+  pinMode(ethReset, INPUT);
 
   Ethernet.begin(mac, ip, myDns, gateway, subnet);
   //  server.begin();

@@ -4,7 +4,8 @@
 // arduino with internal christal 8mhz
 #include <JC_Button.h>  // https://github.com/JChristensen/JC_Button
 #include "LowPower.h"
-#include <SI7021.h>
+#include <SI7021.h>  //SI7021
+
 
 // Module connection pins (Digital Pins)
 const uint8_t BTN1_PIN = 3;              // connect a button switch from this pin to ground
@@ -46,7 +47,7 @@ const unsigned long hc12setHighTime = 90;
 const unsigned long hc12setLowTime = 50;
 const unsigned long hc12cmdTime = 100;
 
-SI7021 sensor;
+SI7021 sensor; //SI7021
 
 uint8_t numberOfRetries = 0; // number of retries on start up to connect to host
 
@@ -65,10 +66,11 @@ void setup() {
   pinMode(INTERRUPT_PIN, INPUT_PULLUP);
   pinMode(INTERRUPT_PIN2, INPUT_PULLUP);
   pinMode(hc12SetPin, OUTPUT);
-  pinMode(SI7021Power, OUTPUT);
+  
+  pinMode(SI7021Power, OUTPUT);  //SI7021
 
   digitalWrite(hc12SetPin, HIGH);
-  digitalWrite(SI7021Power, HIGH);
+  digitalWrite(SI7021Power, HIGH); //SI7021
 
   attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
 
@@ -105,12 +107,12 @@ void reInitAlarm() {
   attachInterrupt(0, interruptHandler, LOW);//attaching a interrupt to pin d2
   attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
 
-  digitalWrite(SI7021Power, LOW);
+  digitalWrite(SI7021Power, LOW); //SI7021
 
   //sleep
   LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
 
-  digitalWrite(SI7021Power, HIGH);
+  digitalWrite(SI7021Power, HIGH); //SI7021
   detachInterrupt(0);
 
   HC12Wake();
@@ -195,7 +197,7 @@ void start() {
     rstId = true;
   }
 
-  if (numberOfRetries == 0 || rstId) { //itf we are not retrying , then get the initial data.. if not we already have it.. 
+  if (numberOfRetries == 0 || rstId) { //itf we are not retrying , then get the initial data.. if not we already have it..
     numberOfRetries = 0;
     //check if ID exist for sensor
     uint8_t address = 0;
@@ -222,7 +224,7 @@ void start() {
       EEPROM.get(address, intervals);
     }
 
-  }else if(numberOfRetries > 0 && identifier[0] == 'A' && identifier[1] == 'A'){
+  } else if (numberOfRetries > 0 && identifier[0] == 'A' && identifier[1] == 'A') {
     idExist = false;
   }
 
@@ -239,19 +241,22 @@ void start() {
   Serial.flush();
 
   startWait = millis();
+//  waitUntil = 10000; //alex
 
   while ( millis() - startWait < waitUntil && !ackRecieved) { //2 min wait time
     recvWithStartEndMarkers();
     handleData();
   }
 
+//  Serial.println(F("aft"));
+  
   if (!ackRecieved) {
     if (numberOfRetries < 8) {
       numberOfRetries ++ ;
       start();
     } else {
 
-      digitalWrite(SI7021Power, LOW);
+      digitalWrite(SI7021Power, LOW); //SI7021
       HC12Sleep();
       attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
       LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
@@ -292,11 +297,13 @@ void recvWithStartEndMarkers() {
 }
 
 void handleData() {
-  char cmd;
-  int eeAddr = 0;
-  char tempId[6];
 
   if (newData == true) {
+
+    char cmd;
+    int eeAddr = 0;
+    char tempId[6];
+
     newData = false;
     cmd = receivedChars[0];
 
@@ -384,7 +391,6 @@ void sendOk(char cmd) {
   Serial.print(END_MARKER);
   Serial.flush();
 }
-
 void setSleepIntervals() {
 
   time_t myTime = RTC.get();
@@ -398,21 +404,3 @@ void setSleepIntervals() {
     ALARM_INTERVAL = intervals * 60;
   }
 }
-
-
-//void printAlarm(time_t t) {
-//  Serial.print(F("year: "));
-//  Serial.print(year(t));
-//  Serial.print(F(" month: "));
-//  Serial.print(month(t));
-//  Serial.print(F(" day: "));
-//  Serial.print(day(t));
-//  Serial.print(F(" hour: "));
-//  Serial.print(hour(t));
-//  Serial.print(F(" minutes: "));
-//  Serial.print(minute(t));
-//  Serial.print(F(" seconds: "));
-//  Serial.print(second(t));
-//  Serial.print(F(" time T: "));
-//  Serial.println(t);
-//}

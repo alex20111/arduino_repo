@@ -3,30 +3,21 @@
 #include <DS3232RTC.h>
 // arduino with internal christal 8mhz
 #include <JC_Button.h>  // https://github.com/JChristensen/JC_Button
-#include <TM1637Display.h>
+#include "LowPower.h"
+// Include the libraries we need
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include "LowPower.h"
 
 // Module connection pins (Digital Pins)
-#define CLK 4
-#define DIO 5
-#define ONE_WIRE_BUS 7
 const uint8_t BTN1_PIN = 3;              // connect a button switch from this pin to ground
 const uint8_t INTERRUPT_PIN = 2;
 const uint8_t INTERRUPT_PIN2 = 3;
 const uint8_t hc12SetPin = 8;
-const uint8_t displayPin = 9;
+const uint8_t SI7021Power = 9;
 
-const uint8_t SEG_ERR[] = {
-  SEG_A | SEG_D | SEG_E | SEG_F | SEG_G, // E
-  SEG_E | SEG_G,                         // r
-  SEG_E | SEG_G,                         // r
-  0,                                     // space
-};
 const char START_MARKER = '<';
 const char END_MARKER = '>';
-const char SENSOR_TYPE = 'p'; //the tyoe of sensor..
+const char SENSOR_TYPE = 't'; //the tyoe of sensor..
 const char DATA_CMD = 'd'; //
 const char INIT_CMD = 'i'; //
 const char START_CMD = 's'; //
@@ -48,14 +39,8 @@ boolean ackRecieved = false;
 unsigned long startWait = 0;
 unsigned long waitUntil = 120000;
 
-TM1637Display display(CLK, DIO);
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature sensors(&oneWire);
-
 Button btn1(BTN1_PIN);       // define the button
 
-boolean displayTemp = false;
-unsigned long prevTempDisplay = 0;
 float temperatureF = 0.0;
 
 // these values are taken from the HC-12 documentation v2 (+10ms for safety)
@@ -64,11 +49,19 @@ const unsigned long hc12setLowTime = 50;
 const unsigned long hc12cmdTime = 100;
 
 uint8_t numberOfRetries = 0; // number of retries on start up to connect to host
+
+// Data wire is plugged into port 2 on the Arduino
+#define ONE_WIRE_BUS 7
+// Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
+OneWire oneWire(ONE_WIRE_BUS);
+
+// Pass our oneWire reference to Dallas Temperature. 
+DallasTemperature sensors(&oneWire);
+
 void interruptHandler() {
 }
 void bntInterrupt() {
   detachInterrupt(1);
-  displayTemp = true;
 }
 
 void(* resetFunc) (void) = 0;
@@ -79,57 +72,31 @@ void setup() {
 
   pinMode(INTERRUPT_PIN, INPUT_PULLUP);
   pinMode(INTERRUPT_PIN2, INPUT_PULLUP);
-  pinMode(hc12SetPin, OUTPUT);
-  pinMode(displayPin, OUTPUT);
+  pinMode(hc12SetPin, OUTPUT);  
 
-  digitalWrite(displayPin, HIGH);
   digitalWrite(hc12SetPin, HIGH);
 
   attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
-  //TM1637
-  display.setBrightness(0x02);
-
-  //dallas thermometer
-  sensors.begin();
-  if (sensors.getDS18Count() == 0)
-    display.setSegments(SEG_ERR);
 
   btn1.begin();
 
   randomSeed(analogRead(0));
 
-  //display 0;
-  display.setBrightness(7, true);
-  display.showNumberDec(0);
   delay(2000);
-  display.setBrightness(7, false);
-  display.showNumberDec(0);
-  digitalWrite(displayPin, LOW);
-//  display.clear();
+
+  // Start up the library
+  sensors.begin();
+
   start();
 }
 
 void loop() {
-  if (!displayTemp) {
-    setSleepIntervals();
 
-    reInitAlarm(); //re initialize alarm and go to sleep
-    if (sensors.getDS18Count() != 0 ) {
-      if (displayTemp) {
-        handleDisplayTemp();
-        prevTempDisplay = millis();
-      }
-      sendTemperature();
-    }
-  }
+  setSleepIntervals();
 
-  //reset temp display and turn off
-  if (millis() - prevTempDisplay > 20000 && displayTemp) { //20 seconds
-    display.setBrightness(7, false);
-     display.showNumberDec(0);
-//    display.clear();
-    displayTemp = false;
-  }
+  reInitAlarm(); //re initialize alarm and go to sleep
+
+  sendTemperature();
 
 }
 void reInitAlarm() {
@@ -144,8 +111,6 @@ void reInitAlarm() {
 
   attachInterrupt(0, interruptHandler, LOW);//attaching a interrupt to pin d2
   attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
-
-  digitalWrite(displayPin, LOW);
 
   //sleep
   LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
@@ -176,31 +141,25 @@ void initialiseClock(long timeInSeconds) {
   RTC.alarmInterrupt(ALARM_1, true);
 }
 
-void handleDisplayTemp() {
-  int temp = (int)temperatureF;
-//  int spaces  = 2;
-//  if (temp >= 100){
-//    spaces = 3;
-//  }
-  digitalWrite(displayPin, HIGH);
-  delay(200);
-
-  display.setBrightness(7, true);
-  display.showNumberDec(temp);
-  
-}
-
 void sendTemperature() {
-  //  Serial.println("send temp"); //alex
   ackRecieved = false;
-  sensors.requestTemperatures();
-  temperatureF =     sensors.getTempFByIndex(0);
+
+  sensors.requestTemperatures(); // Send the command to get temperatures
+  float tempC = sensors.getTempCByIndex(0);
+  // Check if reading was successful
+  if(tempC == DEVICE_DISCONNECTED_C) 
+  {
+   tempC = -99.0;
+  }
+
   Serial.print(START_MARKER);
   Serial.print(DATA_CMD);  //telling the recieved that we are sending data.
   Serial.print(SENSOR_TYPE);
   Serial.print(identifier);
   Serial.print(SEPERATOR);
-  Serial.print(temperatureF);
+  Serial.print(tempC);
+  Serial.print(SEPERATOR);
+  Serial.print('0');
   Serial.print(SEPERATOR);
   Serial.print(SystemStatus().getVCC());
   Serial.print(END_MARKER);
@@ -224,6 +183,7 @@ void HC12Wake() {
   digitalWrite(hc12SetPin, HIGH);
   // wait some extra time
   delay(250);
+
 }
 void sendH12Cmd(const char cmd[]) {
   digitalWrite(hc12SetPin, LOW);
@@ -290,20 +250,24 @@ void start() {
   Serial.flush();
 
   startWait = millis();
+//  waitUntil = 10000; //alex
 
   while ( millis() - startWait < waitUntil && !ackRecieved) { //2 min wait time
     recvWithStartEndMarkers();
     handleData();
   }
 
+//  Serial.println(F("aft"));
+  
   if (!ackRecieved) {
     if (numberOfRetries < 8) {
       numberOfRetries ++ ;
       start();
     } else {
+
+      digitalWrite(SI7021Power, LOW); //SI7021
       HC12Sleep();
       attachInterrupt(1, bntInterrupt, LOW);//attaching a interrupt to pin d2
-      digitalWrite(displayPin, LOW);
       LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
       resetFunc();
     }
@@ -342,11 +306,13 @@ void recvWithStartEndMarkers() {
 }
 
 void handleData() {
-  char cmd;
-  int eeAddr = 0;
-  char tempId[6];
 
   if (newData == true) {
+
+    char cmd;
+    int eeAddr = 0;
+    char tempId[6];
+
     newData = false;
     cmd = receivedChars[0];
 
@@ -379,10 +345,8 @@ void handleData() {
 
       strtokIndx = strtok(tempChars, ",");     // get the first part -  the identifier
       strcpy(tempId, strtokIndx); // copy it to  the identifier
-      //      debug(1);
 
       if (idMatch()) {
-        //        debug(4);
         eeAddr = sizeof(identifier);
 
         strtokIndx = strtok(NULL, ","); // date in milliseconds
@@ -412,7 +376,6 @@ void handleData() {
         sendOk(INIT_CMD);
         delay(2000);// to leave time for the OK to be sent before sleeping..
       }
-      //      debug(5);
     } else if (cmd == 'o' && receivedChars[1] == SENSOR_TYPE && idMatch()) { //ok command recieved
       ackRecieved = true;
     }
@@ -437,12 +400,6 @@ void sendOk(char cmd) {
   Serial.print(END_MARKER);
   Serial.flush();
 }
-void debug(uint8_t cnt) {
-  digitalWrite(displayPin, HIGH);
-  display.setBrightness(7, true);
-  display.showNumberDec(cnt);
-}
-
 void setSleepIntervals() {
 
   time_t myTime = RTC.get();
@@ -456,21 +413,3 @@ void setSleepIntervals() {
     ALARM_INTERVAL = intervals * 60;
   }
 }
-
-
-//void printAlarm(time_t t) {
-//  Serial.print(F("year: "));
-//  Serial.print(year(t));
-//  Serial.print(F(" month: "));
-//  Serial.print(month(t));
-//  Serial.print(F(" day: "));
-//  Serial.print(day(t));
-//  Serial.print(F(" hour: "));
-//  Serial.print(hour(t));
-//  Serial.print(F(" minutes: "));
-//  Serial.print(minute(t));
-//  Serial.print(F(" seconds: "));
-//  Serial.print(second(t));
-//  Serial.print(F(" time T: "));
-//  Serial.println(t);
-//}
