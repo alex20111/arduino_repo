@@ -6,4 +6,4 @@ blue  = Connected to server. Will turn off after a few  minutes if no connecion 
 yellow = On = Garage door is Open  , OFF= garage door is Closed.
 red   =  error from server. See server logs
 
-ping every 1/2 hour
+ping every 1/2 hour . 
