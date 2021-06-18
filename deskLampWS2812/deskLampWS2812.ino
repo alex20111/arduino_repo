@@ -57,36 +57,36 @@ void setup() {
   FastLED.setBrightness(lightBrightness);
   //  modeFunc();
   FastLED.show();
-//  Serial.begin(9600);
+  //  Serial.begin(9600);
 
-//displayDelay = millis(); //del
+  //displayDelay = millis(); //del
 }
 void loop() {
 
   if (isBtnBrightnessPressed()) {
-//    Serial.println("Br");
+    //    Serial.println("Br");
     digitalWrite(TOUCH_LED_PILOT, HIGH);
     lightBrightness += 51;
     if (lightBrightness > 255) {
       lightBrightness = 0;
     }
-//    Serial.println(lightBrightness);
+    //    Serial.println(lightBrightness);
     FastLED.setBrightness(lightBrightness);
     FastLED.show();
   }
   if (isBtnBrightnessReleased()) {
     digitalWrite(TOUCH_LED_PILOT, LOW);
-//    Serial.println(brightnessHeld);
-    if (brightnessHeld > 1500){ //if held more than 1.5 sec, high max
+    //    Serial.println(brightnessHeld);
+    if (brightnessHeld > 1500) { //if held more than 1.5 sec, high max
       lightBrightness = 255;
       FastLED.setBrightness(lightBrightness);
-    FastLED.show();
+      FastLED.show();
     }
   }
 
   if (isBtnUpPressed()) {
     digitalWrite(TOUCH_LED_PILOT, HIGH);
-//    Serial.println("Up pressed");
+    //    Serial.println("Up pressed");
     if (mode == 1 || mode == 2) {
       modeOneColors ++;
       if (modeOneColors > 7)
@@ -103,12 +103,12 @@ void loop() {
   }
   if (isBtnUpReleased()) {
     digitalWrite(TOUCH_LED_PILOT, LOW);
-//    Serial.println("Up Released");
+    //    Serial.println("Up Released");
   }
 
   if (isBtnDownPressed()) {
     digitalWrite(TOUCH_LED_PILOT, HIGH);
-//    Serial.println("Down pressed");
+    //    Serial.println("Down pressed");
     if (mode == 1 || mode == 2) {
       modeOneColors --;
       if (modeOneColors < 0)
@@ -125,21 +125,21 @@ void loop() {
   }
   if (isBtnDownReleased()) {
     digitalWrite(TOUCH_LED_PILOT, LOW);
-//    Serial.println("Down Released");
+    //    Serial.println("Down Released");
   }
 
   if (isBtnModePressed()) {
     digitalWrite(TOUCH_LED_PILOT, HIGH);
-//    Serial.print("Mode pressed: ");
+    //    Serial.print("Mode pressed: ");
     mode ++;
     if (mode > 4) {
       mode = 1;
     }
-//    Serial.println(mode);
+    //    Serial.println(mode);
   }
   if (isBtnModeReleased()) {
     digitalWrite(TOUCH_LED_PILOT, LOW);
-//    Serial.println("Mode Released");
+    //    Serial.println("Mode Released");
   }
 
   if (mode == 1 || mode == 2) {
@@ -155,17 +155,19 @@ void loop() {
 //-----------------------//
 void modeSelectColors() {
 
-  int colors = CRGB::White;
+  CRGB colors = CRGB::White;
 
   switch (modeOneColors) {
-    case 0: colors = CRGB::White;   break;
-    case 1: colors = CRGB::Blue;    break;
-    case 2: colors = CRGB::Green;   break;
-    case 3: colors = CRGB::DeepPink;    break;
-    case 4: colors = CRGB::Purple;  break;
-    case 5: colors = CRGB::Orange;  break;
-    case 6: colors = CRGB::Red;     break;
-    case 7: colors = CRGB::Yellow;  break;
+    case 0: colors.setRGB(255, 197, 143); break;
+    case 1: colors.setRGB(255, 147, 41); break;
+    case 2: colors = CRGB::White;   break;
+    case 3: colors = CRGB::Blue;    break;
+    case 4: colors = CRGB::Green;   break;
+    case 5: colors = CRGB::DeepPink;    break;
+    case 6: colors = CRGB::Purple;  break;
+    case 7: colors = CRGB::Orange;  break;
+    case 8: colors = CRGB::Red;     break;
+    case 9: colors = CRGB::Yellow;  break;
 
     default: colors = CRGB::White;     break;
   }
@@ -199,26 +201,26 @@ boolean isBtnBrightnessPressed() {
   int btn  = touchRead(BRIGHTNESS_BTN);
 
   //del
-//  if (millis() - displayDelay2 > 500){
-//    Serial.print("Touch value of brightness: " );
-//    Serial.println(btn);
-//    displayDelay2 = millis();
-//  }
-//if (btn > TOUCH_THRESHOLD_BRIGHTNESS && !st){
-//  Serial.print("Touch value of brightness: " );
-//    Serial.println(btn);
-//    displayDelay = millis();
-//    st = true;
-//}else if (btn < TOUCH_THRESHOLD_BRIGHTNESS && st){
-//  Serial.print("Pressed for : " );
-//  int dl = millis() - displayDelay;
-//  Serial.println(dl);
-//  st = false;
-//}
+  //  if (millis() - displayDelay2 > 500){
+  //    Serial.print("Touch value of brightness: " );
+  //    Serial.println(btn);
+  //    displayDelay2 = millis();
+  //  }
+  //if (btn > TOUCH_THRESHOLD_BRIGHTNESS && !st){
+  //  Serial.print("Touch value of brightness: " );
+  //    Serial.println(btn);
+  //    displayDelay = millis();
+  //    st = true;
+  //}else if (btn < TOUCH_THRESHOLD_BRIGHTNESS && st){
+  //  Serial.print("Pressed for : " );
+  //  int dl = millis() - displayDelay;
+  //  Serial.println(dl);
+  //  st = false;
+  //}
 
 
-//////////////
-  
+  //////////////
+
 
   if (btn > TOUCH_THRESHOLD_BRIGHTNESS && !btnBrightnessStarted) {
     btnBrightnessStarted = true;
