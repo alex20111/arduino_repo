@@ -227,6 +227,7 @@ void handleData() {
         waitUntil = 600000;
         startWait = millis();
         sendOk(START_CMD);
+        ackRecieved = true;
       }
 
     } else   if (cmd == INIT_CMD && receivedChars[1] == SENSOR_TYPE) { //init command recieved
@@ -294,11 +295,15 @@ boolean idMatch() {
 }
 
 void sendOk(char cmd) {
+
+  int stat = digitalRead(MOSFET_PIN);
+
   Serial.print(START_MARKER);
   Serial.print(cmd);
   Serial.print(SENSOR_TYPE);
   Serial.print(identifier);
   Serial.print(F("ok"));
+  Serial.print(stat);
   Serial.print(END_MARKER);
   Serial.flush();
 }
